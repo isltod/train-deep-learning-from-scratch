@@ -4,7 +4,8 @@ import pickle
 import os, os.path
 import urllib.request
 
-url_base = "http://yann.lecun.com/exdb/mnist/"
+# url_base = "http://yann.lecun.com/exdb/mnist/"
+url_base = "https://ossci-datasets.s3.amazonaws.com/mnist/"
 data_gz_files = {
     "train_img": "train-images-idx3-ubyte.gz",
     "train_label": "train-labels-idx1-ubyte.gz",
@@ -46,14 +47,9 @@ def _load_label(file_name):
     with gzip.open(file_path, "rb") as f:
         # 원본 버퍼의 메모리를 공유해서 빨리 읽어온다...
         # f.read()가 버퍼, 부호 없는 정수형, 오프셋 헤더 바이트 수
-        data = np.frombuffer(f.read(), np.uint8, offset=16)
-    # 로우 수는 데이터 전체 길이에맞춰 자동 계산하고 컬럼 수는 1
-    # -> 컬럼 벡터 만들기
-    print("변환 전: ", data.shape)
-    data = data.reshape(-1, 1)
-    print("변환 후: ", data.shape)
+        labels = np.frombuffer(f.read(), np.uint8, offset=8)
     print("변환 완료.")
-    return data
+    return labels
 
 
 def _load_img(file_name):
@@ -61,7 +57,10 @@ def _load_img(file_name):
     print(file_name + "을(를) 넘파이 배열로 변환...")
     with gzip.open(file_path, "rb") as f:
         data = np.frombuffer(f.read(), np.uint8, offset=16)
+    # 모든 픽셀이 한 줄로 늘어선 형태에서 784(28x28) 픽셀로 60,000개씩 끊기
+    # (47040000,) -> (60000, 784)
     data = data.reshape(-1, img_size)
+    # 로우 수는 데이터 전체 길이에맞춰 자동 계산하고 컬럼 수는 784 -> 컬럼 벡터 만들기
     print("변환 완료.")
     return data
 
@@ -120,7 +119,10 @@ def load_mnist(normalize=True, flatten=True, one_hot_label=False):
 
     if not flatten:
         for key in ("train_img", "test_img"):
+            print(dataset[key].shape)
+            # 60,000개 데이터, 1차원 벡터?, 28x28 이미지
             dataset[key] = dataset[key].reshape(-1, 1, 28, 28)
+            print(dataset[key].shape)
 
     return (dataset["train_img"], dataset["train_label"]), (
         dataset["test_img"],
