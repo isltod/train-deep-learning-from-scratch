@@ -23,26 +23,12 @@ def init_network():
 def predict(network, x):
     W1, W2, W3 = network["W1"], network["W2"], network["W3"]
     b1, b2, b3 = network["b1"], network["b2"], network["b3"]
-
     a1 = np.dot(x, W1) + b1
-    print("x:", x.shape)
-    print("W1:", W1.shape)
-    print("b1:", b1.shape)
-    print("a1:", a1.shape)
     z1 = sigmoid(a1)
     a2 = np.dot(z1, W2) + b2
-    print("z1:", z1.shape)
-    print("W2:", W2.shape)
-    print("b2:", b2.shape)
-    print("a2:", a2.shape)
     z2 = sigmoid(a2)
     a3 = np.dot(z2, W3) + b3
     y = softmax(a3)
-    print("z2:", z2.shape)
-    print("W3:", W3.shape)
-    print("b3:", b3.shape)
-    print("a3:", a3.shape)
-    print("y:", y.shape)
 
     return y
 
@@ -50,11 +36,14 @@ def predict(network, x):
 if __name__ == "__main__":
     x, t = get_data()
     network = init_network()
+    batch_size = 100
     accuracy_cnt = 0
-    for i in range(len(x)):
-        y = predict(network, x[i])
-        p = np.argmax(y)
-        if p == t[i]:
-            accuracy_cnt += 1
+
+    for i in range(0, len(x), batch_size):
+        x_batch = x[i : i + batch_size]
+        y_batch = predict(network, x_batch)
+        # axis=0은 수직, axis=1은 수평, 수평 방향에 대해 argmax를 뽑으니, 남는 건 수직 방향
+        p = np.argmax(y_batch, axis=1)
+        accuracy_cnt += np.sum(p == t[i : i + batch_size])
 
     print("Accuracy: " + str(float(accuracy_cnt) / len(x)))
