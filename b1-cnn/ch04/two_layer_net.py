@@ -55,10 +55,36 @@ class TwoLayerNet:
         # 여기도 헛갈리게 코딩해놨는데,
         # 위에 제목의 numerical_gradient는 TwoLayerNet.numerical_gradient,
         # 이 아래 numerical_gradient는 common.gradient.numerical_gradient
-        grads["W1"] = numerical_gradient(loss_W, self.params["W1"])
-        grads["b1"] = numerical_gradient(loss_W, self.params["b1"])
-        grads["W2"] = numerical_gradient(loss_W, self.params["W2"])
-        grads["b2"] = numerical_gradient(loss_W, self.params["b2"])
+        grads["W1"] = numerical_gradient(loss_W, self.params["W1"])  # (784, 50)
+        grads["b1"] = numerical_gradient(loss_W, self.params["b1"])  # (50,)
+        grads["W2"] = numerical_gradient(loss_W, self.params["W2"])  # (50, 10)
+        grads["b2"] = numerical_gradient(loss_W, self.params["b2"])  # (10,)
+        # 총 393,010 개의 수치 미분을 해야 하는데...아무리 nditer라고 해도 시간이 많이 걸리는 듯...
+
+        return grads
+
+    def gradient(self, x, t):
+        W1, W2 = self.params["W1"], self.params["W2"]
+        b1, b2 = self.params["b1"], self.params["b2"]
+        grads = {}
+
+        batch_num = x.shape[0]
+
+        # forward
+        a1 = np.dot(x, W1) + b1
+        z1 = sigmoid(a1)
+        a2 = np.dot(z1, W2) + b2
+        y = softmax(a2)
+
+        # backward
+        dy = (y - t) / batch_num
+        grads["W2"] = np.dot(z1.T, dy)
+        grads["b2"] = np.sum(dy, axis=0)
+
+        da1 = np.dot(dy, W2.T)
+        dz1 = sigmoid_grad(a1) * da1
+        grads["W1"] = np.dot(x.T, dz1)
+        grads["b1"] = np.sum(dz1, axis=0)
 
         return grads
 

@@ -5,6 +5,10 @@ def sigmoid(x):
     return 1 / (1 + np.exp(-x))
 
 
+def sigmoid_grad(x):
+    return (1.0 - sigmoid(x)) * sigmoid(x)
+
+
 def softmax(x):
     x = x - np.max(x, axis=-1, keepdims=True)
     exp_x = np.exp(x)
