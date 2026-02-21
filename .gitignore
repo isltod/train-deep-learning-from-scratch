@@ -2,10 +2,11 @@
 # supabase
 .env*
 
-# Python venv
+# Python
 venv/
 .venv/
 env/
+__pycache__/
 
 ### Eclipse ###
 .metadata
