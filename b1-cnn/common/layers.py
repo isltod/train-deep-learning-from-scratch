@@ -41,9 +41,10 @@ class Affine:
         # W와 b는 초기화에 받는다..이건 고정이란 얘기...
         self.W = W
         self.b = b
-        # 입력 x는 dW 미분 계산에 필요하니까 선언해 두는데...나머지는?
+        # 입력 x는 dW 미분 계산에 필요하니까 선언해 두는데...
         self.x = None
         self.orgin_x_shape = None
+        # 가중치와 편향 미분은 역전파 때 계산해서 저장한다...그래프 그릴 때 필요한가?
         self.dW = None
         self.db = None
 
@@ -76,7 +77,7 @@ class SoftmaxWithLoss:
         self.t = t
         self.y = softmax(x)
         self.loss = cross_entropy_error(self.y, self.t)
-        # 출력이 소프트맥스가 아니라 손실함수 값인가?
+        # 출력이 소프트맥스가 아니라 손실함수 값인가? 일단 이걸 이용하는 two_layer_net에서 loss를 필요로 한다...
         return self.loss
 
     # 우선 이게 최종이니 dout 값이 1로 고정이고(dL/dL)
