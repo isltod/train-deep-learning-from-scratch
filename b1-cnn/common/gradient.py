@@ -10,7 +10,6 @@ def numerical_gradient(f, x):
     while not it.finished:
         idx = it.multi_index  # 현재 요소의 다차원 인덱스
         tmp_val = x[idx]  # 원래 값 임시 저장
-        print(idx, tmp_val)
 
         # f(x+h) 계산
         # 여기 x는 simpleNet 클래스의 W를 참조로 받아왔으니, 여기서 고치면 그 값이 변한다...
