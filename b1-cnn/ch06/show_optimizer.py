@@ -27,6 +27,7 @@ if __name__ == "__main__":
     optimizers["SGD"] = SGD(lr=0.95)
     optimizers["Momentum"] = Momentum(lr=0.1)
     optimizers["AdaGrad"] = AdaGrad(lr=1.5)
+    optimizers["Adam"] = Adam(lr=0.3)
 
     idx = 1
 

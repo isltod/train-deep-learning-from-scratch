@@ -80,9 +80,20 @@ class SoftmaxWithLoss:
         # 출력이 소프트맥스가 아니라 손실함수 값인가? 일단 이걸 이용하는 two_layer_net에서 loss를 필요로 한다...
         return self.loss
 
-    # 우선 이게 최종이니 dout 값이 1로 고정이고(dL/dL)
+    # 우선 이게 최종이니 dout 값이 1로 고정이고(dL/dL), 근데 여기선 쓰지도 않는데?
     def backward(self, dout=1):
         # 배치로 돌리면 x나 t나 배치 크기는 같으니, 받은 t에서 첫 번째가 배치 사이즈
         batch_size = self.t.shape[0]
-        dx = (self.y - self.t) / batch_size
+        # 정답지 t가 원핫인코딩이면...즉 소프트맥스로 만든 결과 y와 모양이 같으면...
+        if self.t.size == self.y.size:
+            # 단순하게 빼고 배치 사이즈로 나눠서 평균을? 말이되나?
+            # 아...그러니까, y도 t도 (batch_size, 10) 이런 모양이란 얘기로구만...
+            dx = (self.y - self.t) / batch_size
+        else:
+            # 윈핫인코딩이 아니라면, 예측치를 dx로 넣고, 그 예측치에서 배치 0~n까지 정답 t 부분을 1을 뺀다..
+            # 여기서 t는 원핫인코딩이 아니라 정답 위치 인덱스니까...
+            dx = self.y.copy()
+            dx[np.arange(batch_size), self.t] -= 1
+            # 그리고 그걸 배치 사이즈로 나누면...나중에 다 더해야 평균되는거 아닌가?
+            dx = dx / batch_size
         return dx
