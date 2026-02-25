@@ -48,14 +48,19 @@ class MultiLayerNet:
     def __init_weight(self, weight_init_std):
         all_size_list = [self.input_size] + self.hidden_size_list + [self.output_size]
         for idx in range(1, len(all_size_list)):
+            # 초깃값 스케일링,
+            # 일단 기본값으로 넣어 놓는데, 값이 he나 xavier 아니면 0.01 같은 숫자...
             scale = weight_init_std
+            # 그 외에 relu나 he 옵션을 주면 he 초깃값
             if str(weight_init_std).lower() in ("relu", "he"):
                 scale = np.sqrt(2.0 / all_size_list[idx - 1])
+            # 아니고 sigmoid나 xavier 옵션에는 xavier 초깃값 설정
             elif str(weight_init_std).lower() in ("sigmoid", "xavier"):
                 scale = np.sqrt(1.0 / all_size_list[idx - 1])
             self.params["W" + str(idx)] = scale * np.random.randn(
                 all_size_list[idx - 1], all_size_list[idx]
             )
+            # 편향은 0으로 없고...
             self.params["b" + str(idx)] = np.zeros(all_size_list[idx])
 
     def predict(self, x):
