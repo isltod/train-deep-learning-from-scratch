@@ -21,6 +21,11 @@ print("B1:", B1.shape)
 
 # 1층 - 0층의 전달 값과 활성화 함수 통과 값
 A1 = np.dot(X, W1) + B1
+# 이 아래는 203쪽 ch06 같은 가중치 문제 실습...
+# 모두 0인 가중치를 사용하면...
+# A1 = np.dot(X, np.zeros_like(W1)) + np.zeros_like(B1)
+# 그게 아니고 같은 가중치, 예를 들어 1을 갖는다면...
+# A1 = np.dot(X, np.ones_like(W1)) + np.ones_like(B1)
 print("XW1 + B1 = A1:", A1)
 
 Z1 = sigmoid(A1)
