@@ -16,6 +16,17 @@ def smooth_curve(x):
     return y[5 : len(y) - 5]
 
 
+def shuffle_dataset(x, t):
+    """데이터셋을 뒤섞는다"""
+    # 주어진 숫자 내의 정수로 순열을 만든다
+    permutation = np.random.permutation(x.shape[0])
+    # 어쨌든 첫 번째 차원에 대해서만 뒤섞으면 되는 건가? 뒤는 원핫인코딩, 배치, 뭐 그런건가?
+    x = x[permutation, :] if x.ndim == 2 else x[permutation, :, :, :]
+    t = t[permutation]
+
+    return x, t
+
+
 if __name__ == "__main__":
     a = np.array([1, 2, 3, 4, 5])
     lw = 3
