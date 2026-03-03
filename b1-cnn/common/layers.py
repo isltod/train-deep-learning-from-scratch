@@ -1,5 +1,6 @@
 import numpy as np
 from common.functions import softmax, cross_entropy_error
+from common.util import im2col, col2im
 
 
 class Relu:
@@ -216,5 +217,113 @@ class BatchNormalization:
 
         self.dgamma = dgamma
         self.dbeta = dbeta
+
+        return dx
+
+
+class Convolution:
+    def __init__(self, W, b, stride=1, pad=0):
+        self.W = W
+        self.b = b
+        self.stride = stride
+        self.pad = pad
+
+        # 중간 데이터(backward 시 사용)
+        self.x = None
+        self.col = None
+        self.col_W = None
+
+        self.dW = None
+        self.db = None
+
+    def forward(self, x):
+        # 필터(가중치) 형상
+        FN, C, FH, FW = self.W.shape
+        # 입력자료 형상
+        N, C, H, W = x.shape
+        # 출력 세로 가로
+        out_h = int(1 + (H + 2 * self.pad - FH) / self.stride)
+        out_w = int(1 + (W + 2 * self.pad - FW) / self.stride)
+
+        # 입력자료 - 행은 배치 갯수 x 출력 세로 x 출력 가로, 열은 필터 크기 x 채널 수
+        col = im2col(x, FH, FW, self.stride, self.pad)
+        # 가중치 - 행은 필터 갯수, 열은 채널 수 x 필터 크기 - 그걸 다시 전치(dot product)
+        col_W = self.W.reshape(FN, -1).T
+
+        out = np.dot(col, col_W) + self.b
+        # (배치 갯수 x 출력 크기, 필터 갯수) -> (배치 갯수, 필터 갯수(new channel), 출력 세로, 출력 가로)
+        out = out.reshape(N, out_h, out_w, -1).transpose(0, 3, 1, 2)
+
+        self.x = x
+        self.col = col
+        self.col_W = col_W
+
+        return out
+
+    def backward(self, dout):
+        FN, C, FH, FW = self.W.shape
+        dout = dout.transpose(0, 2, 3, 1).reshape(-1, FN)
+
+        self.db = np.sum(dout, axis=0)
+        self.dW = np.dot(self.col.T, dout)
+        self.dW = self.dW.transpose(1, 0).reshape(FN, C, FH, FW)
+
+        dcol = np.dot(dout, self.col_W.T)
+        dx = col2im(dcol, self.x.shape, FH, FW, self.stride, self.pad)
+
+        return dx
+
+
+class Pooling:
+    def __init__(self, pool_h, pool_w, stride=1, pad=0):
+        self.pool_h = pool_h
+        self.pool_w = pool_w
+        self.stride = stride
+        # 풀링에도 패딩이 있나?
+        self.pad = pad
+
+        self.x = None
+        self.arg_max = None
+
+    def forward(self, x):
+        # 입출력 크기 결정
+        N, C, H, W = x.shape
+        out_h = int(1 + (H - self.pool_h) / self.stride)
+        out_w = int(1 + (W - self.pool_w) / self.stride)
+
+        # 전개 (N, C, H, W) -> (N*OH*OW, C*PH*PW)
+        col = im2col(x, self.pool_h, self.pool_w, self.stride, self.pad)
+        # 여기서는 채널 수가 필터 크기와 분리되서 앞으로 가는데...
+        col = col.reshape(-1, self.pool_h * self.pool_w)
+
+        # 최댓값 (Max Pooling)
+        arg_max = np.argmax(col, axis=1)
+        out = np.max(col, axis=1)
+
+        # 성형 - 풀링은 배치 수, 채널 수는 바꾸지 않는다...
+        out = out.reshape(N, out_h, out_w, C).transpose(0, 3, 1, 2)
+
+        self.x = x
+        # ReLU 경우처럼 역전파에서 사용하기 위해서 저장
+        # 역전파에서 max 인덱스에 대해서는 dout 그대로 전달, 아니면 0
+        self.arg_max = arg_max
+
+        return out
+
+    def backward(self, dout):
+        dout = dout.transpose(0, 2, 3, 1)
+
+        # 풀링 세로 가로를 복원(0으로)시키기 위해서 마지막 차원을 pool size로...
+        pool_size = self.pool_h * self.pool_w
+        dmax = np.zeros((dout.size, pool_size))
+        # 최대값 부분만 그대로 전달하고, 나머지는 0 만들려면, 원래 형태로 0 행렬 만들고,
+        # [(0 ~ argmax 크기 인덱스), 각각에서 argmax 값] 위치에 dout 값을 배정
+        dmax[np.arange(self.arg_max.size), self.arg_max.flatten()] = dout.flatten()
+        dmax = dmax.reshape(dout.shape + (pool_size,))
+
+        # 이걸 다시 원래 이미지 형태로 바꿔서 전달
+        dcol = dmax.reshape(dmax.shape[0] * dmax.shape[1] * dmax.shape[2], -1)
+        # 근데 여기서는 어떻게 원래대로 데이터를 늘리지?
+        dx = col2im(dcol, self.x.shape, self.pool_h, self.pool_w, self.stride, self.pad)
 
         return dx
