@@ -74,7 +74,7 @@ class MultiLayerNet:
         weight_decay = 0
         for idx in range(1, self.hidden_layer_num + 2):
             W = self.params["W" + str(idx)]
-            # weight_decay? 이건 뭐지? 가중치 제곱 합에 decay lamdba를 곱해서 계속 추가해?
+            # 가중치 패널티 적용
             weight_decay += 0.5 * self.weight_decay_lambda * np.sum(W**2)
 
         return self.last_layer.forward(y, t) + weight_decay
