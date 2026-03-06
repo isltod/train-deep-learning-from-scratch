@@ -131,10 +131,12 @@ class SimpleConvNet:
         params = {}
         for key, val in self.params.items():
             params[key] = val
+        file_name = os.path.dirname(__file__) + "/" + file_name
         with open(file_name, "wb") as f:
             pickle.dump(params, f)
 
     def load_params(self, file_name="params.pkl"):
+        file_name = os.path.dirname(__file__) + "/" + file_name
         with open(file_name, "rb") as f:
             params = pickle.load(f)
         for key, val in params.items():
