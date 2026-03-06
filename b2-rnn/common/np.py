@@ -8,6 +8,7 @@ if GPU:
     # 지금은 cupyx에 scatter_add 함수를 사용한다고...
     # np.add.at = np.scatter_add
 
+    # \033[ 터미널 명령 이스케이프, 92m 밝은 녹색, - 60번?, 0m 터미널 속성 초기화...
     print("\033[92m" + "-" * 60 + "\033[0m")
     print(" " * 23 + "\033[92mGPU Mode (cupy)\033[0m")
     print("\033[92m" + "-" * 60 + "\033[0m\n")
