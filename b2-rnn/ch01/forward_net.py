@@ -44,12 +44,6 @@ class TwoLayerNet:
         return x
 
 
-import sys, os
-
-sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-
-from common.np import *
-
 # 2차원 데이터, 10개의 배치
 x = np.random.randn(10, 2)
 model = TwoLayerNet(2, 4, 3)
