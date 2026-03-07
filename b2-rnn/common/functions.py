@@ -25,7 +25,7 @@ def softmax(x):
 
 def cross_entropy_error(y, t):
     # 아래 연산들을 위해서 벡터도 행렬로 변환
-    if y.dim == 1:
+    if y.ndim == 1:
         t = t.reshape(1, t.size)
         y = y.reshape(1, y.size)
 
