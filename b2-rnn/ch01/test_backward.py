@@ -2,6 +2,23 @@ import sys, os
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
+import numpy as np
+
+a = np.random.randn(3)
+print("a", a.dtype)
+b = np.random.randn(3).astype("f")
+print("b", b.dtype)
+c = np.random.randn(3).astype(np.float32)
+print("c", c.dtype)
+
+import cupy as cp
+
+d = cp.arange(6).reshape(2, 3).astype("f")
+print("d", d.dtype)
+e = d.sum(axis=1)
+print("e", e.dtype)
+
+
 from common.np import *  # import numpy as
 
 D, N = 8, 7
