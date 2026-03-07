@@ -91,3 +91,27 @@ def most_similar(query, word_to_id, id_to_word, word_matrix, top=5):
         count += 1
         if count >= top:
             return
+
+
+def ppmi(C, verbose=False, eps=1e-8):
+    # ppmi는 각 단어별 전체 단어들에 대해서 다 구하는 모양...그래서 동시행렬과 같은 모양...
+    M = np.zeros_like(C, dtype=np.float32)
+    # 그냥 문장에서 몇 번 나왔냐가 아니라, 단어쌍으로 몇 번 나왔냐를 세는 모양...
+    # 그럼 말뭉치라는 것이 윈도우로 본 단어 쌍을 말하는 건가?
+    N = np.sum(C)
+    # 행별로 합 - 단어별로 단어쌍에 몇 번 나왔나 합...
+    # 근데 동시발생 행렬이 대칭행렬이라 열 방향으로 합해도 결과는 같다...
+    S = np.sum(C, axis=0)
+    total = C.shape[0] * C.shape[1]
+    cnt = 0
+
+    for i in range(C.shape[0]):
+        for j in range(C.shape[1]):
+            pmi = np.log2(C[i, j] * N / (S[j] * S[i]) + eps)
+            M[i, j] = max(0, pmi)
+
+            if verbose:
+                cnt += 1
+                if cnt % (total // 100) == 0:
+                    print("%.1f%% 완료" % (100 * cnt / total))
+    return M
