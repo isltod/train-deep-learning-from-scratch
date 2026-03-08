@@ -25,7 +25,7 @@ class SimpleCBOW:
         layers = [self.in_layer0, self.in_layer1, self.out_layer]
         self.params, self.grads = [], []
         for layer in layers:
-            # 더하기를 하면 append가 되나?
+            # 더하기를 하면 append가 되네...
             self.params += layer.params
             self.grads += layer.grads
 
@@ -51,4 +51,5 @@ class SimpleCBOW:
         da *= 0.5
         self.in_layer1.backward(da)
         self.in_layer0.backward(da)
+        # 근데 역전파는 반환하는 값이 없나? 경사도도 저장 안하고?
         return None
