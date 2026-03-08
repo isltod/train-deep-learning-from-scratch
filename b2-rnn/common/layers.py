@@ -168,6 +168,7 @@ class Dropout:
         return dout * self.mask
 
 
+# 이건 어휘가 너무 많을 때, 원핫 벡터가 문제가 되니까, 원핫 없이 가중치 처리하기 위한 노드...
 class Embedding:
     def __init__(self, W):
         self.params = [W]
@@ -175,20 +176,31 @@ class Embedding:
         self.idx = None
 
     def forward(self, idx):
+        # params에 뭐가 몇 개 있는지 어떻게 알고 튜플로 W를 받을 수 있지?
         (W,) = self.params
+        # 추출할 행의 인덱스들이 배열(배치 처리)로 들어있다고 가정...역전파에서 쓰도록 저장
         self.idx = idx
+        # 그럼 np.matmul 없이 간단히 슬라이싱으로 원핫 x 가중치 효과를 낼 수 있다...
         out = W[idx]
         return out
 
     def backward(self, dout):
+        # 여기도 grads에 뭐가 몇 개 있는지 어떻게 알고 튜플로 첫 번째 요소를 받으면 그게 dW라는거냐?
         (dW,) = self.grads
+        # 일단 0으로 채우고 위에서 내려온 dout를 순전파에서 추출된 행에 넣어준게 역전파 미분이다...
+        # 순전파가 x*W인데 x가 원핫 벡터니까 그 자리에 1 곱하기가 미분이란 말인가?
+        # 층이 둘 밖에 없는 구조라서 x 미분은 쓸데 없고?
         dW[...] = 0
         # 뭔가 예전(8이하)에는 add.at을 호출해 scatter_add를 연결해서 처리했는데, 이게 없어졌다고...
         # 지금은 cupyx에 scatter_add 함수를 사용한다고...
         if GPU:
             import cupyx
 
+            # 하는 일은 아래 else 부분 참고...
             cupyx.scatter_add(dW, self.idx, dout)
         else:
+            # idx 배열마다 돌면서 dW의 idx 자리에 dout를 더한다...아래와 같은 코드...
             np.add.at(dW, self.idx, dout)
+            # for i, word_id in enumerate(self.idx):
+            #     dW[word_id] += dout[i]
         return None
