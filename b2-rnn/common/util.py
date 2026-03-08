@@ -115,3 +115,45 @@ def ppmi(C, verbose=False, eps=1e-8):
                 if cnt % (total // 100) == 0:
                     print("%.1f%% 완료" % (100 * cnt / total))
     return M
+
+
+def create_contexts_target(corpus, window_size=1):
+    # 양 끝 단어(윈도우 크기 고려해서)는 제외하고..순서대로 타겟
+    target = corpus[window_size:-window_size]
+    contexts = []
+
+    # 여기도 윈도우 크기 고려해서 끝단 단어는 제외하고 돌면서
+    for idx in range(window_size, len(corpus) - window_size):
+        cs = []
+        # 윈도우만큼 이전부터 다음까지를 순서대로 담고
+        for t in range(-window_size, window_size + 1):
+            if t == 0:
+                continue
+            cs.append(corpus[idx + t])
+        # 이걸 다시 context에 담으면, 행은 target, 열은 window 내 context...
+        contexts.append(cs)
+
+    return np.array(contexts), np.array(target)
+
+
+def convert_one_hot(corpus, vocab_size):
+    N = corpus.shape[0]
+    # 받은 말뭉치가 1차원이면, target이란 말이고...
+    if corpus.ndim == 1:
+        # 원핫은 원래 크기를 행으로 놓고, 열은 어휘 수로 초기화 - 0
+        one_hot = np.zeros((N, vocab_size), dtype=np.int32)
+        for idx, word_id in enumerate(corpus):
+            # 인덱스 위치만 1로 바꾸면 원핫
+            one_hot[idx, word_id] = 1
+    # 아니고 2차원이면, contexts라는 얘기고
+    elif corpus.ndim == 2:
+        C = corpus.shape[1]
+        # 세 번째 차원으로 어휘 수만큼 0 초기화
+        one_hot = np.zeros((N, C, vocab_size), dtype=np.int32)
+        # target - context 별로 돌면서
+        for idx_0, word_ids in enumerate(corpus):
+            # context 안의 각 단어마다 원핫 처리...
+            for idx_1, word_id in enumerate(word_ids):
+                one_hot[idx_0, idx_1, word_id] = 1
+
+    return one_hot

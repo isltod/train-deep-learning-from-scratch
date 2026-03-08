@@ -74,3 +74,50 @@ class Trainer:
         plt.xlabel("반복 (x" + str(self.eval_interval) + ")")
         plt.ylabel("손실")
         plt.show()
+
+
+# 이게 params나 grads에 같은 행렬 있으면 찾아서 지우는 코드라는데...
+# 이게 왜 필요한지도 모르겠고...
+def remove_duplicate(params, grads):
+    # 일단 문제 안생기도록 복사해놓고 시작
+    params, grads = params[:], grads[:]  # copy list
+
+    # 아래서 for문으로 다 도는데 while True가 왜 필요하지?
+    while True:
+        find_flg = False
+        L = len(params)
+
+        # 뭔가 반복 없이 각 행렬별로 순서쌍을 만들려는 것 같은데...이게 아닐텐데...
+        for i in range(0, L - 1):
+            for j in range(i + 1, L):
+                # 가중치 공유, 즉 param내 어떤 행렬이 다른 행렬과 똑같을 때...
+                if params[i] is params[j]:
+                    # 같은 행렬이 나왔다면...경사를 더해? 같은 행렬을 제외하는 건 그렇다치고...
+                    grads[i] += grads[j]
+                    find_flg = True
+                    params.pop(j)
+                    grads.pop(j)
+                # 가중치를 전치행렬로 공유하는 경우(weight tying)라...이건 뭔가?
+                elif (
+                    params[i].ndim == 2
+                    and params[j].ndim == 2
+                    and params[i].T.shape == params[j].shape
+                    # 배열이 몽땅 같다면 True, 아니면 False
+                    and np.all(params[i].T == params[j])
+                ):
+                    # 위와 마찬가지로 경사는 더하고 같은 행렬은 제외...
+                    grads[i] += grads[j].T
+                    find_flg = True
+                    params.pop(j)
+                    grads.pop(j)
+
+                # 같은 행렬 발견했으면 일단 i j 돌면서 찾는 걸 중지한다...밑에서 다시 돌아오게 해놨다...
+                if find_flg:
+                    break
+            if find_flg:
+                break
+
+        # 뭔가 같은 행렬이 있었다면 다시 처음부터 찾아보고, 다 돌았는데도 같은 행렬 없다면 나가기
+        if not find_flg:
+            break
+    return params, grads
