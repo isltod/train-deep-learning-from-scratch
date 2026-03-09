@@ -176,7 +176,7 @@ class Embedding:
         self.idx = None
 
     def forward(self, idx):
-        # params에 뭐가 몇 개 있는지 어떻게 알고 튜플로 W를 받을 수 있지?
+        # 이게 헛갈리게 튜플로 받는데, 위에 init보면 params에는 W 딱 하나...그러니까 params 리스트 벗기고 W 배열 받기
         (W,) = self.params
         # 추출할 행의 인덱스들이 배열(배치 처리)로 들어있다고 가정...역전파에서 쓰도록 저장
         self.idx = idx
@@ -185,7 +185,8 @@ class Embedding:
         return out
 
     def backward(self, dout):
-        # 여기도 grads에 뭐가 몇 개 있는지 어떻게 알고 튜플로 첫 번째 요소를 받으면 그게 dW라는거냐?
+        # 여기도 헛갈리지만, init보면 zeros_like가 배열 만들고 그걸 []로 다시 감쌌으니,
+        # 바깥 괄호 벗기고 안쪽 배열 받는걸 튜플로 받는 코드로 만들었다..
         (dW,) = self.grads
         # 일단 0으로 채우고 위에서 내려온 dout를 순전파에서 추출된 행에 넣어준게 역전파 미분이다...
         # 순전파가 x*W인데 x가 원핫 벡터니까 그 자리에 1 곱하기가 미분이란 말인가?
