@@ -5,11 +5,11 @@ import numpy as np
 from common import config
 
 # GPU 사용 여부...켜먼 화면 나갈 수도...
-config.GPU = False
+config.GPU = True
 
 import pickle
 from common.trainer import Trainer
-from common.optimizer import Adam
+from common.optimizer import Adam, AdaGrad
 from cbow import CBOW
 from common.util import create_contexts_target, to_cpu, to_gpu
 from dataset import ptb
@@ -31,6 +31,7 @@ if config.GPU:
 # 모델 만들고
 model = CBOW(vocab_size, hidden_size, window_size, corpus)
 optimizer = Adam()
+# optimizer = AdaGrad()
 trainer = Trainer(model, optimizer)
 
 # 여기가 학습 + 차트...
@@ -51,6 +52,6 @@ params = {}
 params["word_vecs"] = word_vecs.astype(np.float16)
 params["word_to_id"] = word_to_id
 params["id_to_word"] = id_to_word
-pkl_file = "cbow_params.pkl"
+pkl_file = os.path.join(os.path.dirname(__file__), "cbow_params.pkl")
 with open(pkl_file, "wb") as f:
     pickle.dump(params, f, -1)

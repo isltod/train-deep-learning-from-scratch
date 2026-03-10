@@ -10,7 +10,7 @@ class CBOW:
     def __init__(self, vocab_size, hidden_size, window_size, corpus):
         V, H = vocab_size, hidden_size
 
-        # 가중치 초기화
+        # 가중치 초기화 - 어휘 사전 크기 x 은닉층 크기
         W_in = 0.01 * np.random.randn(V, H).astype("f")
         W_out = 0.01 * np.random.randn(V, H).astype("f")
 
@@ -30,9 +30,9 @@ class CBOW:
             self.params += layer.params
             self.grads += layer.grads
 
-        # 단어 벡터는 역시 입력 매개변수를 사용한다...
+        # 일단 입력 가중치와 출력 가중치는 서로 다른데...이 둘 다 단어벡터라고 하는데...
+        # 어쨌든 단어 벡터는 입력 매개변수를 사용한다...
         self.word_vecs = W_in
-        # 출력 가중치가 같은지 보기 위해 테스트
         self.word_vecs1 = W_out
 
     def forward(self, contexts, target):

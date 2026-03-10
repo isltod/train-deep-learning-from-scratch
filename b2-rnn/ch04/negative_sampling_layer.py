@@ -94,6 +94,7 @@ class UnigramSampler:
         else:
             # cupy에서는 반복도 허용하고 정답 확률을 0으로 만들지도 않는다...속도를 우선한다고...
             # 근데 이러면 정답지가 오답에 포함될 수 도 있는 문제가 있다...
+            # 일단 여기서 오류 발생...Illeagal memory access?
             negative_sample = np.random.choice(
                 self.vocab_size,
                 size=(batch_size, self.sample_size),

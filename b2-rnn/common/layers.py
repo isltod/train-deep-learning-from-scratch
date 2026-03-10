@@ -81,12 +81,14 @@ class SigmoidWithLoss:
 
     def forward(self, x, t):
         self.t = t
-        self.y = 1 / (1 - np.exp(-x))
+        self.y = 1 / (1 + np.exp(-x))
 
         # 그냥 CEE가 아니라 이진 교차 엔트로피(Binary Cross Entropy)여야 역전파 미분이 y - t로 간단하게 나온다...
         # BCE = -[tlogy + (1-t)log(1-y)]
         # np.c_는 두 열벡터를 이어붙여 행렬로 만들기...
-        # 근데 t는 왜 (1-t)가 없지? 그리고 이 값은 스칼라인가 아니면 벡터인가?
+        # 이 부분은 정답부분 예측과 오답부분 예측을 나눠서 각각 호출하고,
+        # 정답부분에서는 t가 모두 [1, 1, ...], 오답부분에서는 모두 [0, 0, ...]으로,
+        # 미리 t 또는 1-t 형태로 넘어오니까 아래 인수 부분에 1-t는 필요없음
         self.loss = cross_entropy_error(np.c_[1 - self.y, self.y], self.t)
 
         return self.loss
