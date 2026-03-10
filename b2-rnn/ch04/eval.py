@@ -6,6 +6,7 @@ import pickle
 
 # CBOW 모델 학습 매개변수 불러들이고
 pkl_file = os.path.join(os.path.dirname(__file__), "cbow_params.pkl")
+# pkl_file = os.path.join(os.path.dirname(__file__), "skip_gram_params.pkl")
 
 with open(pkl_file, "rb") as f:
     params = pickle.load(f)

@@ -30,6 +30,7 @@ if config.GPU:
 
 # 모델 만들고
 model = CBOW(vocab_size, hidden_size, window_size, corpus)
+# model = SkipGram(vocab_size, hidden_size, window_size, corpus)
 optimizer = Adam()
 # optimizer = AdaGrad()
 trainer = Trainer(model, optimizer)
@@ -41,17 +42,18 @@ trainer.plot()
 # 단어벡터, 사전 피클로 저장...모델에서 학습된 결과가 결국 단어벡터인가?
 # 이건 입력가중치고, 출력 가중치가 있는데...서로 같나?
 word_vecs = model.word_vecs
-word_vecs1 = model.word_vecs1
+# word_vecs1 = model.word_vecs1
 if config.GPU:
     word_vecs = to_cpu(word_vecs)
-    word_vecs1 = to_cpu(word_vecs1)
-print(word_vecs[0])
-print(word_vecs1[0])
+    # word_vecs1 = to_cpu(word_vecs1)
+# print(word_vecs[0])
+# print(word_vecs1[0])
 
 params = {}
 params["word_vecs"] = word_vecs.astype(np.float16)
 params["word_to_id"] = word_to_id
 params["id_to_word"] = id_to_word
 pkl_file = os.path.join(os.path.dirname(__file__), "cbow_params.pkl")
+# pkl_file = os.path.join(os.path.dirname(__file__), "skip_gram_params.pkl")
 with open(pkl_file, "wb") as f:
     pickle.dump(params, f, -1)

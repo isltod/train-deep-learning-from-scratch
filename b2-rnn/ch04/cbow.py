@@ -24,6 +24,7 @@ class CBOW:
 
         # 매개변수를 모아두는데, 이건 왜 이렇게 모으는지 아직도 잘 이해가 안간다...
         # 이렇게 [] 형태로 더해야 한 번에 리스트로 묶인다..
+        # in_layers 10개(window 5 * 2) + ns_loss 6개(정답 1 + sample_size 5)
         layers = self.in_layers + [self.ns_loss]
         self.params, self.grads = [], []
         for layer in layers:
@@ -33,7 +34,7 @@ class CBOW:
         # 일단 입력 가중치와 출력 가중치는 서로 다른데...이 둘 다 단어벡터라고 하는데...
         # 어쨌든 단어 벡터는 입력 매개변수를 사용한다...
         self.word_vecs = W_in
-        self.word_vecs1 = W_out
+        # self.word_vecs1 = W_out
 
     def forward(self, contexts, target):
         # h를 스칼라 0, 나중에 배열 더하면 배열이 된다...

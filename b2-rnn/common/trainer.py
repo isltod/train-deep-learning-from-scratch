@@ -1,3 +1,6 @@
+import sys
+
+sys.path.append("..")
 import numpy
 import time
 import matplotlib.pyplot as plt
@@ -23,12 +26,13 @@ class Trainer:
 
         start_time = time.time()
         for epoch in range(max_epoch):
-            # 뒤섞기
-            idx = np.random.permutation(np.arange(data_size))
+            # 매 epoch마다 데이터 뒤섞기
+            idx = numpy.random.permutation(numpy.arange(data_size))
             x = x[idx]
             t = t[idx]
 
             for iters in range(max_iters):
+                # 각 epoch 내에서, 앞에서부터 batch_size 만큼씩 떠서 학습...
                 batch_x = x[iters * batch_size : (iters + 1) * batch_size]
                 batch_t = t[iters * batch_size : (iters + 1) * batch_size]
 
@@ -36,12 +40,19 @@ class Trainer:
                 loss = model.forward(batch_x, batch_t)
                 # 기울기는 반환값으로 받는게 아니라, 참조 변수로 model 안의 grads에 있는걸 수정...
                 model.backward()
-                params, grads = model.params, model.grads
+                # in_layers 10개(window 5 * 2) 중복 + ns_loss 6개(정답 1 + sample_size 5) 중복인데,
+                # 여기서 대표 각 1개씩 뽑았는데, 이게 params - model.params[0~전부]와 다 같은 메모리(즉 같은 객체)...
+                # 왜나면 처음 만들 때 W_in 하나를 만들어서 모든 레이어에 넣었고,
+                # remove_dup에서도 얕은 복사로 메모리를 공유했으므로...
+                # 그래서 대표로 뽑은 grads, params만 고쳐도 나머지(16개)가 싹다 고쳐진다...
+                # 더구나 같은 놈이 나오면 대표에게 grad를 몰아준다...그래서 이게 있어야 학습이 되는 모양...
+                params, grads = remove_duplicate(model.params, model.grads)
+                # params, grads = model.params, model.grads
 
                 if max_grad is not None:
                     clip_grads(grads, max_grad)
 
-                # 가중치 수정도 반환값 아니라 참조 변수로...
+                # 가중치 수정도 반환값 아니라 참조 변수로, grads를 가지고 params를 변경하는데...근데 이건 self.params 아닌데?
                 optimizer.update(params, grads)
                 total_loss += loss
                 loss_count += 1
@@ -76,23 +87,31 @@ class Trainer:
         plt.show()
 
 
-# 이게 params나 grads에 같은 행렬 있으면 찾아서 지우는 코드라는데...
-# 이게 왜 필요한지도 모르겠고...
+# in_layers 10개(window 5 * 2) 중복 + ns_loss 6개(정답 1 + sample_size 5) 중복 등,
+# 같은 가중치를 공유해서 여러 레이어들을 만들고,
+# 굳이 그 가중치들을 다 리스트로 모아서 중복을 만들었는데,
+# 왜 굳이 이렇게 일부러 중복을 만들고, 여기선 또 그 중에 대표만 뽑아서 얕은 복사로 객체를 만드는지...
+# 아래 같은 행렬이 나오면 그걸 빼고, 그에 해당하는 기울기를 대표에게 다 몰아주는데, 이걸 안해서 학습이 안되나보다...
 def remove_duplicate(params, grads):
-    # 일단 문제 안생기도록 복사해놓고 시작
+    # 이게 복잡한데, 일단 왼쪽 params와 오른쪽은 다른 객체(메모리 주소 다름) 맞는데,
+    # 그 안에 params[0]은 얕은 복사로 왼쪽 오른쪽이 연결된 상태...
+    # 아래에서 params.pop 하면, 원래 params 아닌 새로 만든 params에서 그 원소가 빠지는 건 맞는데,
+    # 남아있는 params[0]은 원래 params에 들어있던 0번째 배열 그걸 가리키고 있는 상황이다...
     params, grads = params[:], grads[:]  # copy list
 
-    # 아래서 for문으로 다 도는데 while True가 왜 필요하지?
+    # for문으로만 돌면 중복 pop 시키면 꼬이니까, 중복 나오면 for문 종료하고 밖에 while 문에 의지...
     while True:
+        # 중복 제거 for문 시작할 때마다 깃발과 총 길이 다시 설정하고 돌기...
         find_flg = False
         L = len(params)
 
-        # 뭔가 반복 없이 각 행렬별로 순서쌍을 만들려는 것 같은데...이게 아닐텐데...
+        # 반복 없이 각 행렬별로 순서쌍 만들기...
         for i in range(0, L - 1):
             for j in range(i + 1, L):
-                # 가중치 공유, 즉 param내 어떤 행렬이 다른 행렬과 똑같을 때...
+                # params 내 어떤 행렬이 다른 행렬과 메모리 주소가 같을 때...
+                # 레이어 만들 때 W_in 하나 만들어서 다 그걸 넣었으면 이런 상황인데...
                 if params[i] is params[j]:
-                    # 같은 행렬이 나왔다면...경사를 더해? 같은 행렬을 제외하는 건 그렇다치고...
+                    # 같은 행렬이 나왔다면 분기했다는 의미...역전파는 경사를 더한다..
                     grads[i] += grads[j]
                     find_flg = True
                     params.pop(j)
