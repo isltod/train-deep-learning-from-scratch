@@ -174,3 +174,59 @@ def to_gpu(x):
     if type(x) == cupy.ndarray:
         return x
     return cupy.asarray(x)
+
+
+def normalize(x):
+    if x.ndim == 2:
+        s = np.sqrt((x * x).sum(1))
+        x /= s.reshape((s.shape[0], 1))
+    elif x.ndim == 1:
+        s = np.sqrt((x * x).sum())
+        x /= s
+    return x
+
+
+# a/b/c는 king/man/queen 같은 관련 단어들
+def analogy(a, b, c, word_to_id, id_to_word, word_matrix, top=5, answer=None):
+    # 검색어가 단어 목록에 없으면 종료
+    for word in (a, b, c):
+        if word not in word_to_id:
+            print("%s(을)를 찾을 수 없습니다." % word)
+            return
+
+    print("\n[analogy] " + a + ":" + b + " = " + c + ":?")
+    # 검색어를 벡터로 읽고
+    a_vec, b_vec, c_vec = (
+        word_matrix[word_to_id[a]],
+        word_matrix[word_to_id[b]],
+        word_matrix[word_to_id[c]],
+    )
+    # king - man + woman 같은 단어 유추 연산
+    query_vec = b_vec - a_vec + c_vec
+    # 정규화...유사도 구하는데 분모 norm이 다 1로 떨어지도록...단어 벡터들은 정규화가 되어 있나?
+    # 일단 출발이 randn이라 정규분포에서 추출하긴 하는데...그래도 앞에 0.01을 곱하고 시작하는데?
+    query_vec = normalize(query_vec)
+
+    # 단어별 내적을 다 구하는데...이게 유사도...
+    similarity = np.dot(word_matrix, query_vec)
+    # 요구되는 답이 있다면 그 답에 대한 유사도만 보고
+    if answer is not None:
+        print(
+            "==>"
+            + answer
+            + ":"
+            + str(np.dot(word_matrix[word_to_id[answer]], query_vec))
+        )
+
+    # 아니면 top에 지정된 숫자만큼 순서대로 유사한 단어 보고...
+    count = 0
+    for i in (-1 * similarity).argsort():
+        if np.isnan(similarity[i]):
+            continue
+        if id_to_word[i] in (a, b, c):
+            continue
+        print(" %s: %s" % (id_to_word[i], similarity[i]))
+
+        count += 1
+        if count >= top:
+            return
