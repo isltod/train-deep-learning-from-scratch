@@ -255,3 +255,92 @@ class TimeSoftmaxWithLoss:
         dx = dx.reshape((N, T, V))
 
         return dx
+
+
+class LSTM:
+    def __init__(self, Wx, Wh, b):
+        # Wx는 단어 표현 차원 D x 은닉 상태 차원 H*4 - Wf, Wg, Wi, Wo가 연달아 묶인 형태
+        # Wh는 H x H*4, b는 H*4
+        self.params = [Wx, Wh, b]
+        self.grads = [np.zeros_like(Wx), np.zeros_like(Wh), np.zeros_like(b)]
+        self.cache = None
+
+    def forward(self, x, h_prev, c_prev):
+        Wx, Wh, b = self.params
+        N, H = h_prev.shape
+
+        # 257쪽 식 6.6 참고, A에는 f = XtWf + Bf, g = XtWg + Bg, ... 네가지의 계산 결과가 이어져 있고...
+        A = np.dot(x, Wx) + np.dot(h_prev, Wh) + b
+
+        # 각각이 은닉 상태 차원 H 만큼씩 결과를 내니까, 행 배치는 전부, 열은 H씩 끊어서 f, g, i, o
+        f = A[:, :H]
+        g = A[:, H : 2 * H]
+        i = A[:, 2 * H : 3 * H]
+        o = A[:, 3 * H :]
+
+        # g만 메모리 값(-1~1), f/i/o는 다 게이트(0~1), 그에 맞게 활성화 함수 적용
+        f = sigmoid(f)
+        g = np.tanh(g)
+        i = sigmoid(i)
+        o = sigmoid(o)
+
+        # 255쪽 그림 6-18 참고, c_next는 f와 아다마르 곱, g와 i도 아다마르 곱, 둘을 합친다...
+        c_next = f * c_prev + g * i
+        # 그 결과에 tanh 적용하고 출력 게이트와 아다마르 곱하면 다음 상태값 h
+        h_next = o * np.tanh(c_next)
+
+        # 역전파 계산에 필요한 값들을 저장? h와 c next는 반환...
+        self.cache = (x, h_prev, c_prev, i, f, g, o, c_next)
+        return h_next, c_next
+
+    # 259쪽 그림 6-21 참고, 우선 위에서 넘어오는 dout는 dh_next와 dc_next 두 가지로 오고...
+    def backward(self, dh_next, dc_next):
+        # f, g, i, o에 대한 가중치들이 연결된 행렬 형태...
+        Wx, Wh, b = self.params
+        x, h_prev, c_prev, i, f, g, o, c_next = self.cache
+
+        tanh_c_next = np.tanh(c_next)
+        # dh_next * o -> h_next 방향에서 dh_next가 넘어오면 곱 노드는 반대 쪽 o를 곱(아다마르)해서 역전파
+        # 1 - tanh_c_next**2 -> 위에서 받은 미분에 tanh의 미분 1 - y^2 (y=tanh[c_next]) 아다마르 곱해서 다시 전달
+        # dc_next -> Ct가 Ct와 Ht로 분기했으므로 둘을 더하기
+        ds = dc_next + (dh_next * o) * (1 - tanh_c_next**2)
+
+        # g x i와 덧셈은 그냥 흐르니 무시하고, f와 곱은 반대 측 값을 아다마르 곱해서 역전파 전달
+        dc_prev = ds * f
+
+        # o 방향 미분은 tanh와 아다마르 곱이었으므로, 위에서 넘어온 dh_next에 반대측 tanh_c_next 곱해서 전달
+        do = dh_next * tanh_c_next
+        # 다음은 sigmoid 함수 거쳤으므로 do * o(1-o) 아다마르 곱
+        do *= o * (1 - o)
+
+        # i와 g 방향은 Ct 경로로 넘어온 ds에, Ct와 합은 무시(곱 1)하고,
+        # 각각 서로 아다마르 곱했었으므로 반대측 (i->g, g->i)를 곱해서 전달
+        di = ds * g
+        dg = ds * i
+        # 그 다음은 i는 sigmoid, g는 tanh 거쳤으므로 각각 y(1 - y), 1 - y^2 아다마르 곱해서 전달
+        di *= i * (1 - i)
+        dg *= 1 - g**2
+
+        # f 방향 미분도 넘어온 ds에 반대측 c_prev 아다마르 곱, 그 다음엔 sigmoid 부분 반영
+        df = ds * c_prev
+        df *= f * (1 - f)
+
+        # 네 개로 slice 한 부분은 다시 모으는 것으로 역전파라고...
+        # 세로가 배치, 가로가 출력이었으니가 가로 모으기
+        dA = np.hstack((df, dg, di, do))
+
+        # 맨 처음 4개 모은 Affine 변환 부분, 예의 반대측 전치 행렬 곱하기와 더하기...
+        dWh = np.dot(h_prev.T, dA)
+        dWx = np.dot(x.T, dA)
+        db = dA.sum(axis=0)
+
+        # self.grads[0]에는 dWx, 1에는 dWh, 2에는 db 계속 덮어쓰기...
+        self.grads[0][...] = dWx
+        self.grads[1][...] = dWh
+        self.grads[2][...] = db
+
+        # 다음으로 넘기기 위해서 반환할 dx, dh_prev도 예의 그 Affine 변환 역전파...
+        dx = np.dot(dA, Wx.T)
+        dh_prev = np.dot(dA, Wh.T)
+
+        return dx, dh_prev, dc_prev
