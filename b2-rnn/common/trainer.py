@@ -87,6 +87,108 @@ class Trainer:
         plt.show()
 
 
+class RnnlmTrainer:
+    def __init__(self, model, optimizer):
+        self.model = model
+        self.optimizer = optimizer
+        self.time_idx = None
+        # 확률 역수 perplexity 목록이겠지...
+        self.ppl_list = None
+        self.eval_interval = None
+        self.current_epoch = 0
+
+    # 전체 훈련 단어들과 정답지, 배치 크기, RNN 펼치기 수 = 단어 순서
+    def get_batch(self, x, t, batch_size, time_size):
+        batch_x = np.empty((batch_size, time_size), dtype="i")
+        batch_t = np.empty((batch_size, time_size), dtype="i")
+
+        # 0~배치 크기 99까지, 배치 덩어리 크기로 점프 리스트...[0, 10, 20, ..., 980, 990]
+        data_size = len(x)
+        jump = data_size // batch_size
+        offsets = [i * jump for i in range(batch_size)]
+
+        for time in range(time_size):
+            # 한 배치 내에서 반복
+            for i, offset in enumerate(offsets):
+                # 단어 순서 3, 배치 번호 4는 batch_x[4, 3]에, 그 다음 단어는 batch_t[4, 3]에 저장...
+                batch_x[i, time] = x[(offset + self.time_idx) % data_size]
+                batch_t[i, time] = t[(offset + self.time_idx) % data_size]
+            # 위에 time_size는 항상 5 고정, 즉 5번씩 끊어 읽는데...
+            # 이걸 에포크에서 반복해서 한 배치는 10개지만 총 1000개의 데이터를 배치 100개로 읽어야 하니까,
+            # 0~99까지 자리를 바꿔가며 읽기 위해서 time_idx를 1씩 증가
+            self.time_idx += 1
+        # 배치 N x 단어 순서 T 행렬
+        return batch_x, batch_t
+
+    # 훈련 데이터(처음부터 -1까지 문장), 정답지(2에서 마지막까지 문장), 100 에포크 돌기, 10개씩 끊어 처리, RNN 펼치기 5개
+    def fit(
+        self,
+        xs,
+        ts,
+        max_epoch=10,
+        batch_size=20,
+        time_size=35,
+        max_grad=None,
+        eval_interval=20,
+    ):
+        # 훈련 문장 단어들 수
+        data_size = len(xs)
+        # 에포크 안에서 반복은 전체 훈련 단어 수를 배치 크기 * RNN 펼치기로 나누기
+        max_iters = data_size // (batch_size * time_size)
+        self.time_idx = 0
+        self.ppl_list = []
+        self.eval_interval = eval_interval
+        model, optimizer = self.model, self.optimizer
+        total_loss = 0
+        loss_count = 0
+
+        start_time = time.time()
+        for epoch in range(max_epoch):
+            for iters in range(max_iters):
+                # 전체 훈련 단어들과 정답지, 배치 크기, RNN 펼치기 수 넣고,
+                # 전체 단어 수를 배치 크기로 나눈 덩어리, 배치 N x 단어 순서 T 행렬 받고
+                batch_x, batch_t = self.get_batch(xs, ts, batch_size, time_size)
+
+                # 기울기 구해 매개변수 갱신
+                loss = model.forward(batch_x, batch_t)
+                model.backward()
+                # 대표 가중치/경사도 행렬 뽑고, 나머지는 다 참조로 연결된 상태...
+                params, grads = remove_duplicate(model.params, model.grads)
+                if max_grad is not None:
+                    clip_grads(grads, max_grad)
+                optimizer.update(params, grads)
+                total_loss += loss
+                loss_count += 1
+
+                # 퍼플레서티 평가
+                if (eval_interval is not None) and (iters % eval_interval) == 0:
+                    # 230쪽 식 5.12, 13 참고
+                    ppl = np.exp(total_loss / loss_count)
+                    elapsed_time = time.time() - start_time
+                    print(
+                        "| 에폭 %d |  반복 %d / %d | 시간 %d[s] | 퍼플레서티 %.2f"
+                        % (
+                            self.current_epoch + 1,
+                            iters + 1,
+                            max_iters,
+                            elapsed_time,
+                            ppl,
+                        )
+                    )
+                    self.ppl_list.append(float(ppl))
+                    total_loss, loss_count = 0, 0
+            self.current_epoch += 1
+
+    def plot(self, ylim=None):
+        x = numpy.arange(len(self.ppl_list))
+        if ylim is not None:
+            plt.ylim(*ylim)
+        plt.plot(x, self.ppl_list, label="train")
+        plt.xlabel("반복 (x" + str(self.eval_interval) + ")")
+        plt.ylabel("퍼플레서티")
+        plt.show()
+
+
 # in_layers 10개(window 5 * 2) 중복 + ns_loss 6개(정답 1 + sample_size 5) 중복 등,
 # 같은 가중치를 공유해서 여러 레이어들을 만들고,
 # 굳이 그 가중치들을 다 리스트로 모아서 중복을 만들었는데,

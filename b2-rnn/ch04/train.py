@@ -11,6 +11,7 @@ import pickle
 from common.trainer import Trainer
 from common.optimizer import Adam, AdaGrad
 from cbow import CBOW
+from skip_gram import SkipGram
 from common.util import create_contexts_target, to_cpu, to_gpu
 from dataset import ptb
 
@@ -29,8 +30,9 @@ if config.GPU:
     contexts, target = to_gpu(contexts), to_gpu(target)
 
 # 모델 만들고
-model = CBOW(vocab_size, hidden_size, window_size, corpus)
-# model = SkipGram(vocab_size, hidden_size, window_size, corpus)
+# model = CBOW(vocab_size, hidden_size, window_size, corpus)
+model = SkipGram(vocab_size, hidden_size, window_size, corpus)
+# 왠지 모르겠지만 Adam이 Adagrad보다 훨씬 낫다...
 optimizer = Adam()
 # optimizer = AdaGrad()
 trainer = Trainer(model, optimizer)
@@ -53,7 +55,7 @@ params = {}
 params["word_vecs"] = word_vecs.astype(np.float16)
 params["word_to_id"] = word_to_id
 params["id_to_word"] = id_to_word
-pkl_file = os.path.join(os.path.dirname(__file__), "cbow_params.pkl")
-# pkl_file = os.path.join(os.path.dirname(__file__), "skip_gram_params.pkl")
+# pkl_file = os.path.join(os.path.dirname(__file__), "cbow_params.pkl")
+pkl_file = os.path.join(os.path.dirname(__file__), "skip_gram_params.pkl")
 with open(pkl_file, "wb") as f:
     pickle.dump(params, f, -1)
