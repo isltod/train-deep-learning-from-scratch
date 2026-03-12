@@ -108,7 +108,8 @@ class TimeRNN:
 
             # 위에 grads는 총 3개로 초기화됐고, 위 RNN 클래스에서 grads는 dWx, dWh, db 세가지를 담는데...
             for i, grad in enumerate(layer.grads):
-                # grads[0]에는 0~T-1번째 dWx가 다 합쳐져 들어간다...
+                # TimeRNN 안에는 T개의 RNN이 같은 가중치를 가지고, 이건 Wx 등이 분기해서 들어간 꼴...
+                # 그래서 클래스별로 다 합쳐저야 되고, grads[0]에는 0~T-1번째 dWx가 다 합쳐져 들어간다...
                 grads[i] += grad
 
         # T-1~0번째 dWx를 다 합친걸 self.grads[0]에, dWh 다 합친건 self.grads[1]에 덮어쓰기라...
@@ -344,3 +345,79 @@ class LSTM:
         dh_prev = np.dot(dA, Wh.T)
 
         return dx, dh_prev, dc_prev
+
+
+class TimeLSTM:
+    def __init__(self, Wx, Wh, b, stateful=False):
+        # Wx는 단어 표현 차원 D x 은닉 상태 차원 H*4 - Wf, Wg, Wi, Wo가 연달아 묶인 형태
+        # Wh는 H x H*4, b는 H*4
+        self.params = [Wx, Wh, b]
+        self.grads = [np.zeros_like(Wx), np.zeros_like(Wh), np.zeros_like(b)]
+        self.layers = None
+
+        # 이걸 왜 인스턴스 변수로 저장하지? 이전 반복이 아니라 이전 단계의 TimeLSTM 값을 받아와야 하는거 아닌가?
+        self.h, self.c = None, None
+        self.dh = None
+        self.stateful = stateful
+
+    def forward(self, xs):
+        Wx, Wh, b = self.params
+        N, T, D = xs.shape
+        H = Wh.shape[0]
+
+        # forward 호출할 때마다 레이어도 hs도 다 새로 만든다...이게 맞나?
+        self.layers = []
+        hs = np.empty((N, T, H), dtype="f")
+
+        if not self.stateful or self.h is None:
+            self.h = np.zeros((N, H), dtype="f")
+        if not self.stateful or self.c is None:
+            self.c = np.zeros((N, H), dtype="f")
+
+        for t in range(T):
+            layer = LSTM(*self.params)
+            # 0~T-1번 레이어까지 순서대로 돌아가면서 앞의 h, c 받아서 다음 h, c 반환...
+            # 이건 인스턴스 변수로 저장하지 않아도 되는거 아닌가?
+            self.h, self.c = layer.forward(xs[:, t, :], self.h, self.c)
+            # 또한 그 중 h는 hs 만들기
+            hs[:, t, :] = self.h
+
+            # 이건 역전파에서 쓸려고 저장? forward가 다시 호출되면 이건 다 초기화되는데...
+            self.layers.append(layer)
+
+        return hs
+
+    # 이 역전파에서는 dout은 dhs
+    def backward(self, dhs):
+        Wx, Wh, b = self.params
+        N, T, H = dhs.shape
+        # Wx는 단어 표현 차원 D x 은닉 상태 차원 H*4
+        D = Wx.shape[0]
+
+        dxs = np.empty((N, T, D), dtype="f")
+        dh, dc = 0, 0
+
+        # self.grads[0]에는 dWx, 1에는 dWh, 2에는 db
+        grads = [0, 0, 0]
+        for t in reversed(range(T)):
+            layer = self.layers[t]
+            # h가 분기해서 hs의 t 자리에 들어가고, 다음 RNN으로 넘겨지므로 미분은 둘을 합하고...
+            dx, dh, dc = layer.backward(dhs[:, t, :] + dh, dc)
+            # 거기서 나온 dx는 dxs의 t 자리에...순전파에서 xs의 t 자리가 입력됐으므로...
+            dxs[:, t, :] = dx
+            # dWx, dWh, db는 LSTM 레이어의 인스턴스 변수로 저장되어 있던 것들을 레이어 역순으로 다 더한다...
+            for i, grad in enumerate(layer.grads):
+                # TimeLSTM 안에는 T개의 LSTM이 같은 가중치를 가지고, 이건 Wx 등이 분기해서 들어간 꼴...
+                # 그래서 클래스별로 다 합쳐저야 되고, grads[0]에는 0~T-1번째 dWx가 다 합쳐져 들어간다...
+                grads[i] += grad
+
+        for i, grad in enumerate(grads):
+            self.grads[i][...] = grad
+        self.dh = dh
+        return dxs
+
+    def set_state(self, h, c=None):
+        self.h, self.c = h, c
+
+    def reset_state(self):
+        self.h, self.c = None, None
