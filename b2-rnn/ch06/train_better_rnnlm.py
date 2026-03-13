@@ -13,12 +13,12 @@ from dataset import ptb
 from better_rnnlm import BetterRnnlm
 
 # 하이퍼 파라미터인데...이건 왜 이렇게 주는지 어떻게 결정하는건가...
-batch_size = 20
+batch_size = 80
 wordvec_size = 650
 hidden_size = 650
 time_size = 35
 lr = 20.0
-# 원래 40번 돌릴려고 했는데...자꾸 죽으니 10번씩 나눠서 돌려보자...27
+# 원래 40번 돌릴려고 했는데...자꾸 죽으니 10번씩 나눠서 돌려보자...26
 # max_epoch = 40
 max_epoch = 10
 max_grad = 0.25
@@ -44,11 +44,12 @@ ts = corpus[1:]
 model = BetterRnnlm(vocab_size, wordvec_size, hidden_size, dropout)
 file_dir = os.path.dirname(__file__)
 file_name = model.__class__.__name__ + ".pkl"
-file_path = os.path.join(file_dir, file_name)
+param_file = os.path.join(file_dir, file_name)
 lr_file = os.path.join(file_dir, "lr.pkl")
 ppl_file = os.path.join(file_dir, "ppl.pkl")
 # 맨 처음 이외에는 아래를 실행
-model.load_params(file_path)
+if os.path.exists(param_file):
+    model.load_params(param_file)
 if os.path.exists(lr_file):
     with open(lr_file, "rb") as f:
         lr = pickle.load(f)
@@ -81,7 +82,7 @@ for epoch in range(max_epoch):
         best_ppl = ppl
         with open(ppl_file, "wb") as f:
             pickle.dump(best_ppl, f)
-        model.save_params(file_name=file_path)
+        model.save_params(file_name=param_file)
     else:
         lr /= 4.0
         optimizer.lr = lr

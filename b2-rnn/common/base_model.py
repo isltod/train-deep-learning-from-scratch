@@ -43,8 +43,8 @@ class BaseModel:
 
         with open(file_name, "rb") as f:
             # 잘못된 이전 버전...
-            params, grads = pickle.load(f)
-            # params = pickle.load(f)
+            # params, grads = pickle.load(f)
+            params = pickle.load(f)
 
         params = [p.astype("f") for p in params]
         if GPU:

@@ -365,8 +365,10 @@ class TimeLSTM:
         N, T, D = xs.shape
         H = Wh.shape[0]
 
-        # forward 호출할 때마다 레이어도 hs도 다 새로 만든다...이게 맞나?
+        # forward 호출할 때마다, 이전에 수정했던 가중치 등을 이용해서 레이어들을 새로 만든다...
+        # 레이어가 고정돼 있고 가중치만 수정되는 게 아니라, 아예 새로 만든다...
         self.layers = []
+        # hs도 다 새로 만든다...이전에 전달했던 것과는 상관없고, 어차피 새로 계산해야 하니까..
         hs = np.empty((N, T, H), dtype="f")
 
         if not self.stateful or self.h is None:
