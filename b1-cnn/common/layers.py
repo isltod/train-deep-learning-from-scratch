@@ -117,6 +117,8 @@ class Dropout:
             self.mask = np.random.rand(*x.shape) > self.dropout_ratio
             return x * self.mask
         else:
+            # 뭐지? 훈련 아니면 원래 값을 dropout_ratio만큼 감소시켜서 반환?
+            # 더구나 backward에서는 이런 처리는 없는데?
             return x * (1.0 - self.dropout_ratio)
 
     def backward(self, dout):

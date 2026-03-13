@@ -421,3 +421,30 @@ class TimeLSTM:
 
     def reset_state(self):
         self.h, self.c = None, None
+
+
+class TimeDropout:
+    def __init__(self, dropout_ratio=0.5):
+        self.params, self.grads = [], []
+        self.dropout_ratio = dropout_ratio
+        self.mask = None
+        self.train_flg = True
+
+    def forward(self, xs):
+        # 훈련에서만 드롭아웃 적용하는데...
+        if self.train_flg:
+            flg = np.random.rand(*xs.shape) > self.dropout_ratio
+            # 뭐지 이건? 드롭아웃 비율에 비례해서, 1~ 숫자를 마스크에 곱해? 마스크는 True/False 아닌가?
+            # dropout_ratio = 1/2 면 scale = 2...뭔가 깎은만큼 보상한다 그런건가?
+            scale = 1 / (1.0 - self.dropout_ratio)
+            self.mask = flg.astype(np.float32) * scale
+
+            return xs * self.mask
+        else:
+            # 훈련 아닐때는 dropout 없음
+            # 근데 이러면 self.mask = None 상태 아닌가? 그럼 backward에서는 None 아니면 NaN 되는거 아닌가?
+            # 훈련이 아니면 backward를 계산할 필요가 없어서 상관없나?
+            return xs
+
+    def backward(self, dout):
+        return dout * self.mask

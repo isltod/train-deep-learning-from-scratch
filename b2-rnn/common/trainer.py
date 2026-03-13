@@ -166,7 +166,7 @@ class RnnlmTrainer:
                     ppl = np.exp(total_loss / loss_count)
                     elapsed_time = time.time() - start_time
                     print(
-                        "| 에폭 %d |  반복 %d / %d | 시간 %d[s] | 퍼플레서티 %.2f"
+                        "| 에폭 %d |  반복 %d / %d | 시간 %d[s] | 퍼플렉서티 %.2f"
                         % (
                             self.current_epoch + 1,
                             iters + 1,
@@ -185,7 +185,7 @@ class RnnlmTrainer:
             plt.ylim(*ylim)
         plt.plot(x, self.ppl_list, label="train")
         plt.xlabel("반복 (x" + str(self.eval_interval) + ")")
-        plt.ylabel("퍼플레서티")
+        plt.ylabel("퍼플렉서티")
         plt.show()
 
 
