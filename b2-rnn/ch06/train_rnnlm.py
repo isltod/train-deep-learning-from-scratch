@@ -1,13 +1,17 @@
 import sys, os
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+from common import config
+
+config.GPU = True
+
 from common.optimizer import SGD
 from common.trainer import RnnlmTrainer
 from common.util import eval_perplexity
 from dataset import ptb
 from rnnlm import Rnnlm
 
-batch_size = 20
+batch_size = 160
 wordvec_size = 100
 hidden_size = 100
 time_size = 35
@@ -34,4 +38,7 @@ model.reset_state()
 ppl_test = eval_perplexity(model, corpus_test)
 print("테스트 퍼플렉서티: ", ppl_test)
 
-model.save_params()
+file_name = model.__class__.__name__ + ".pkl"
+file_dir = os.path.dirname(__file__)
+file_path = os.path.join(file_dir, file_name)
+model.save_params(file_name=file_path)
