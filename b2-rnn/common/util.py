@@ -1,3 +1,4 @@
+import os
 import sys
 from common.np import *
 
@@ -269,3 +270,46 @@ def eval_perplexity(model, corpus, batch_size=10, time_size=35):
     # 최종 퍼플렉서티...230쪽 식 5.12, 13 참고
     ppl = np.exp(total_loss / max_iters)
     return ppl
+
+
+def eval_seq2seq(model, question, correct, id_to_char, verbose=False, is_reverse=False):
+    # 이게 정답지 배열인가? 1차원으로 만들고
+    correct = correct.flatten()
+    # 머릿글자
+    start_id = correct[0]
+    # 나머지 정답들...
+    correct = correct[1:]
+    # 생성된 추측들...
+    guess = model.generate(question, start_id, len(correct))
+
+    # 다 문자열로 변환
+    question = "".join([id_to_char[int(c)] for c in question.flatten()])
+    correct = "".join([id_to_char[int(c)] for c in correct])
+    guess = "".join([id_to_char[int(c)] for c in guess])
+
+    if verbose:
+        # 이건 뭔가? 뒤에서 나오는 트릭인가?
+        if is_reverse:
+            # 처음부터 끝까지 -1, 반대 방향으로...뒤집기
+            question = question[::-1]
+
+        # 뭔가 화면에 맞고 틀리고를 구분해주는 트릭들...
+        colors = {"ok": "\033[92m", "fail": "\033[91m", "close": "\033[0m"}
+        print("Q", question)
+        print("T", correct)
+
+        is_windows = os.name == "nt"
+
+        if correct == guess:
+            mark = colors["ok"] + "☑" + colors["close"]
+            if is_windows:
+                mark = "O"
+            print(mark + " " + guess)
+        else:
+            mark = colors["fail"] + "☒" + colors["close"]
+            if is_windows:
+                mark = "X"
+            print(mark + " " + guess)
+        print("---")
+
+    return 1 if guess == correct else 0
