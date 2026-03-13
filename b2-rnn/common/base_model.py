@@ -42,7 +42,9 @@ class BaseModel:
             raise IOError("No such file: " + file_name)
 
         with open(file_name, "rb") as f:
-            params = pickle.load(f)
+            # 잘못된 이전 버전...
+            params, grads = pickle.load(f)
+            # params = pickle.load(f)
 
         params = [p.astype("f") for p in params]
         if GPU:
