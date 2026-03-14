@@ -131,7 +131,7 @@ class TimeEmbedding:
         self.W = W
 
     def forward(self, xs):
-        # Xs는 모양이 NTD 아닌가?
+        # Xs는 모양 배채 N x T 개의 ID(단어 ID 또는 문자 ID), W는 단어사전 크기 V x 단어(문자) 표현 차원 D
         N, T = xs.shape
         V, D = self.W.shape
 
@@ -140,11 +140,10 @@ class TimeEmbedding:
 
         # 0~T-1개 단어어 대해서
         for t in range(T):
-            # 단어별로 Embedding 층을 만들어서, t번째 단어를 한 번에 넣어서 출력을 만든다...
-            # 근데 그게 N1D모양인가? 그리고 그걸 합쳐서 NTD 모양 행렬로 만든다?
+            # 각 배치에 대해, 단어별로 Embedding 층 만들고, ID t로 W의 t행을 뽑아낸다...
+            # 배치 N x 단어(문자) 1 x 단어(문자) 표현 차원 D
             layer = Embedding(self.W)
             # 인덱스들을 받아서 위에 넣은 W의 인덱스에 해당되는 행들을 꺼내는 과정인데...
-            # xs[:, t]가 왜 그런 인덱스가 되는거지?
             out[:, t, :] = layer.forward(xs[:, t])
             self.layers.append(layer)
 

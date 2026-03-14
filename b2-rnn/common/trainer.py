@@ -32,7 +32,7 @@ class Trainer:
             t = t[idx]
 
             for iters in range(max_iters):
-                # 각 epoch 내에서, 앞에서부터 batch_size 만큼씩 떠서 학습...
+                # 배치 크기 x 7 or 5(문제 7칸 답 5칸의 문자를 ID로) 배열
                 batch_x = x[iters * batch_size : (iters + 1) * batch_size]
                 batch_t = t[iters * batch_size : (iters + 1) * batch_size]
 

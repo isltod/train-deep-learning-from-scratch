@@ -8,15 +8,17 @@ from common.optimizer import Adam
 from common.trainer import Trainer
 from common.util import eval_seq2seq
 from seq2seq import Seq2seq
+from peeky_seq2seq import PeekySeq2seq
 
-# 데이터셋 읽기
+
+# 데이터셋 읽기 - 데이터 50,000 x 7 or 5(각각 문자 ID)
 (x_train, t_train), (x_test, t_test) = sequence.load_data("addition.txt")
 char_to_id, id_to_char = sequence.get_vocab()
 
 # 입력 반전 여부 설정이라...나중에 볼 트릭인가...
-# is_reverse = True
-# if is_reverse:
-#     x_train, x_test = x_train[:, ::-1], x_test[:, ::-1]
+is_reverse = True
+if is_reverse:
+    x_train, x_test = x_train[:, ::-1], x_test[:, ::-1]
 
 # 하이퍼파라미터 설정 - 근데 여기 wordvec이나 max_grad 등의 하이퍼파라미터는 어떻게 정하지?
 vocab_size = len(char_to_id)
@@ -27,7 +29,9 @@ max_epoch = 25
 max_grad = 5.0
 
 # 모델
-model = Seq2seq(vocab_size, wordvec_size, hidden_size)
+# model = Seq2seq(vocab_size, wordvec_size, hidden_size)
+model = PeekySeq2seq(vocab_size, wordvec_size, hidden_size)
+
 optimizer = Adam()
 trainer = Trainer(model, optimizer)
 
@@ -42,11 +46,7 @@ for epoch in range(max_epoch):
         # 10개 이하면 verbose하게 출력하란 얘기겠지..
         verbose = i < 10
         correct_num += eval_seq2seq(
-            model,
-            question,
-            correct,
-            id_to_char,
-            verbose,  # is_reverse
+            model, question, correct, id_to_char, verbose, is_reverse
         )
 
     acc = float(correct_num) / len(x_test)
