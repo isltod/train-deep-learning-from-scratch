@@ -486,3 +486,148 @@ class TimeBiLSTM:
         dxs = dxs1 + dxs2
 
         return dxs
+
+
+class GRU:
+    def __init__(self, Wx, Wh):
+        # reset r, update z, output h~ 세 가지 가중치가 묶여있는 가중치들
+        self.Wx, self.Wh = Wx, Wh
+        self.dWx, self.dWh = None, None
+        self.cache = None
+
+    def forward(self, x, h_prev):
+        # 은닉 가중치는 H x H, 그게 rzh 세 개가 모여있는데...나눠 받고
+        H, H3 = self.Wh.shape
+        Wxz, Wxr, Wxh = self.Wx[:, :H], self.Wx[:, H : 2 * H], self.Wx[:, 2 * H :]
+        Whz, Whr, Whh = self.Wh[:, :H], self.Wh[:, H : 2 * H], self.Wh[:, 2 * H :]
+
+        # 402쪽 식 C.1~4 계산
+        z = sigmoid(np.dot(h_prev, Whz) + np.dot(x, Wxz))
+        r = sigmoid(np.dot(h_prev, Whr) + np.dot(x, Wxr))
+        h_hat = np.tanh(np.dot(x, Wxh) + np.dot(r * h_prev, Whh))
+        h_next = (1 - z) * h_prev + z * h_hat
+
+        # 역전파를 위해 입력 x, 출력 h_prev, update z, reset r, output h_hat 저장
+        self.cache = (x, h_prev, z, r, h_hat)
+        # 나가는 건 h_next만...
+        return h_next
+
+    def backward(self, dh_next):
+        # 마찬가지로 은닉 가중치는 H x H, 그게 rzh 세 개가 모여있는데...나눠 받고
+        H, H3 = self.Wh.shape
+        Wxz, Wxr, Wxh = self.Wx[:, :H], self.Wx[:, H : 2 * H], self.Wx[:, 2 * H :]
+        Whz, Whr, Whh = self.Wh[:, :H], self.Wh[:, H : 2 * H], self.Wh[:, 2 * H :]
+        # 순전파에서 계산해서 저장했던 값들 읽고
+        x, h_prev, z, r, h_hat = self.cache
+
+        # 403쪽 그림 C-2 참고해서...
+        # 맨 마지막 합은 두 방향으로 dh_next 그냥 흘리고,
+        # 순전파에서 h_next 계산 부분을 처리하는데...
+        # h_hat의 tanh 방향은 반대쪽 z 곱하고
+        dh_hat = dh_next * z
+        # h_prev 방향은 반대쪽 1-z 곱하고
+        dh_prev = dh_next * (1 - z)
+
+        # 다음으로 순전파에서 h_hat 계산 부분을 처리하는데...
+        # tanh 역전파는 1-y^2
+        dt = dh_hat * (1 - h_hat**2)
+        # 다시 그 안에서 합은 dt 분기하고, 먼저
+        # Whh 방향은 반대쪽 r*h_prev의 전치
+        dWh = np.dot((r * h_prev).T, dt)
+        # r*h_prev 방향은 Whh의 전치
+        dhr = np.dot(dt, Whh.T)
+        # Wxh 방향은 x의 전치, x 방향은 Wxh의 전치 곱하고...
+        dWx = np.dot(x.T, dt)
+        dx = np.dot(dt, Wxh.T)
+        # tanh에서 나와서 r*h_prev 쪽의 곱에서, h_prev 쪽은 반대쪽 r을 아다마르 곱하고,
+        # 그걸 위에서 계산한 h_next에서 h_prev 쪽으로 흐르는 역전파에 합 - 순전파 때 분기
+        dh_prev += r * dhr
+
+        # 다음에는 순전파의 upate z 부분 역전파...
+        # 맨 바깥에서 dh_next -> 합은 분기 통과 -> z 방향은 h_prev 곱하기 -> 1- 노드는 - 따라서 -dh_next*h_prev,
+        # 분기시켜서 h_hat과 곱했던 부분은, (위에서 내려온 dh_next * 반대쪽 h_hat), 이걸 더한다...
+        dz = dh_next * h_hat - dh_next * h_prev
+        # 시그모이드 역전파 미분은 dL/dy * y(-1y)
+        dt = dz * z * (1 - z)
+        # 다음, 시그모이드 내부에 합은 그냥 분기, dot은 반대측 전치행렬 곱하기
+        dWhz = np.dot(h_prev.T, dt)
+        # h_prev와 x는 분기해서 들어왔었으니까 더해주기
+        dh_prev += np.dot(dt, Whz.T)
+        dWxz = np.dot(x.T, dt)
+        dx += np.dot(dt, Wxz.T)
+
+        # 다음은 순전파의 reset r 부분 역전파인데...
+        # tanh에서 r 방향으로 나와 h_prev와 곱(아다마르) 부분 먼저, 반대 방향 곱해주고
+        dr = dhr * h_prev
+        # 시그모이드는 역전파 미분 r(1-r)
+        dt = dr * r * (1 - r)
+        # z 경우와 비슷하게 시그모이드 내부 합은 그냥 분기, 나머지 dot은 반대측 전치 곱
+        dWhr = np.dot(h_prev.T, dt)
+        # 이것도 z와 비슷하게 분기했던 h_prev, x는 더해주기
+        dh_prev += np.dot(dt, Whr.T)
+        dWxr = np.dot(x.T, dt)
+        dx += np.dot(dt, Wxr.T)
+
+        # x와 h에 대한 매개변수 슬라이싱 했던 것 다시 쌓기
+        self.dWx = np.hstack((dWxz, dWxr, dWx))
+        self.dWh = np.hstack((dWhz, dWhr, dWh))
+        return dx, dh_prev
+
+
+class TimeGRU:
+    # Wx는 단어 표현 차원 D x 은닉 상태 차원 H, Wh는 HxH
+    def __init__(self, Wx, Wh, b, stateful=False):
+        # TimeGRU 안의 GRU들은 같은 가중치를 복사해 갖는다...rzh 부분은 stack 쌓은거 잘라서 사용하므로 다르고...
+        self.Wx, self.Wh = Wx, Wh
+        self.dWx, self.dWh = None, None
+        self.layers = None
+        self.h, self.dh = None, None
+        self.stateful = stateful
+
+    def set_state(self, h):
+        self.h = h
+
+    def reset_state(self):
+        self.h = None
+
+    def forward(self, xs):
+        N, T, D = xs.shape
+        H, H3 = self.Wh.shape
+
+        # 가중치만 고쳐서 쓰는게 아니라, 호출할 때마다 레이어 새로 만들기...
+        self.layers = []
+        hs = np.empty((N, T, H), dtype="f")
+
+        if not self.stateful or self.h is None:
+            self.h = np.zeros((N, H), dtype="f")
+
+        # 문장 또는 단어 수대로 GRU 레이어 만들고,
+        for t in range(T):
+            layer = GRU(self.Wx, self.Wh)
+            # 순전파해서 각각의 h 구하고, 그 단어 또는 문자 자리 t에 넣어서 전체 행렬 만들기
+            self.h = layer.forward(xs[:, t, :], self.h)
+            hs[:, t, :] = self.h
+            self.layers.append(layer)
+
+        return hs
+
+    def backward(self, dhs):
+        N, T, H = dhs.shape
+        D = self.Wx.shape[0]
+
+        # 호출할 때마다 경사도 고쳐놓는게 아니라, 아예 초기화하고 다시 계산...
+        dxs = np.empty((N, T, D), dtype="f")
+        self.dWx, self.dWh = 0, 0
+        dh = 0
+
+        # 시계열 순서를 역으로 돌아야 하고...
+        for t in reversed(range(T)):
+            layer = self.layers[t]
+            # 각각 x 방향과 h 방향 역전파 돌리고, 결과는 자기 자리 t에 끼워 넣기
+            dx, dh = layer.backward(dhs[:, t, :] + dh)
+            dxs[:, t, :] = dx
+            self.dWx += layer.dWx
+            self.dWh += layer.dWh
+
+        self.dh = dh
+        return dxs
