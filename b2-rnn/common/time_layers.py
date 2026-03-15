@@ -449,3 +449,40 @@ class TimeDropout:
 
     def backward(self, dout):
         return dout * self.mask
+
+
+class TimeBiLSTM:
+    def __init__(self, Wx1, Wh1, b1, Wx2, Wh2, b2, stateful=False):
+        # 양방향 LSTM은 일단 좌우 1개 우좌 1개 레이어 만들고, 가중치와 기울기도 모으고
+        self.forward_lstm = TimeLSTM(Wx1, Wh1, b1, stateful)
+        self.backward_lstm = TimeLSTM(Wx2, Wh2, b2, stateful)
+        self.params = self.forward_lstm.params + self.backward_lstm.params
+        self.grads = self.forward_lstm.grads + self.backward_lstm.grads
+
+    def forward(self, xs):
+        # 좌우는 원래 하던대로 순전파
+        o1 = self.forward_lstm.forward(xs)
+        # 우좌는 입력을 뒤집어 넣고(우->좌), 다시 나온 결과를 뒤집어(좌->우) 단어(문자) 순서 맞추기
+        o2 = self.backward_lstm.forward(xs[:, ::-1])
+        o2 = o2[:, ::-1]
+
+        # 두 개를 붙여서 배치 x 표현 자원 행렬로 내보내기
+        out = np.concatenate((o1, o2), axis=2)
+        return out
+
+    def backward(self, dhs):
+        # 표현 차원 부분을 둘로 나누고(concat 반대)
+        H = dhs.shape[2] // 2
+        do1 = dhs[:, :, :H]
+        do2 = dhs[:, :, H:]
+
+        # 좌우 역전파는 하던대로...
+        dxs1 = self.forward_lstm.backward(do1)
+        # 우좌 역전파는 결과 뒤집기 -> 역전파 -> 입력 뒤집기로 반대로...
+        do2 = do2[:, ::-1]
+        dxs2 = self.backward_lstm.backward(do2)
+        dxs2 = dxs2[:, ::-1]
+        # 원래 xs 하나를 분기해서 두 번 넣었으므로 둘을 더한다
+        dxs = dxs1 + dxs2
+
+        return dxs
