@@ -51,4 +51,4 @@ class BaseModel:
             params = [to_gpu(p) for p in params]
 
         for i, param in enumerate(self.params):
-            param[...] = to_gpu(params[i])
+            param[...] = params[i]

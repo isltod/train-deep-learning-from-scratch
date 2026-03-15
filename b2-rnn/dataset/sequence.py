@@ -19,7 +19,6 @@ def _update_vocab(txt):
 
 
 def load_data(file_name="addition.txt", seed=1984):
-    # file_path = os.path.join(os.path.dirname(__file__), "dataset", file_name)
     file_path = os.path.dirname(os.path.abspath(__file__)) + "/" + file_name
 
     if not os.path.exists(file_path):

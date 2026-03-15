@@ -32,7 +32,8 @@ class Trainer:
             t = t[idx]
 
             for iters in range(max_iters):
-                # 배치 크기 x 7 or 5(문제 7칸 답 5칸의 문자를 ID로) 배열
+                # 덧셈 문제: 배치 크기 x 7 or 5(문제 7칸 답 5칸의 문자를 ID로) 배열
+                # 날짜 형식 문제: 배치 x 29 or 11 배열
                 batch_x = x[iters * batch_size : (iters + 1) * batch_size]
                 batch_t = t[iters * batch_size : (iters + 1) * batch_size]
 
@@ -47,7 +48,6 @@ class Trainer:
                 # 그래서 대표로 뽑은 grads, params만 고쳐도 나머지(16개)가 싹다 고쳐진다...
                 # 더구나 같은 놈이 나오면 대표에게 grad를 몰아준다...그래서 이게 있어야 학습이 되는 모양...
                 params, grads = remove_duplicate(model.params, model.grads)
-                # params, grads = model.params, model.grads
 
                 if max_grad is not None:
                     clip_grads(grads, max_grad)

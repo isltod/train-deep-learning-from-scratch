@@ -106,11 +106,12 @@ class Softmax:
         self.out = None
 
     def forward(self, x):
+        # 순전파는 쉬운데...그냥 소프트맥스 함수 적용...
         self.out = softmax(x)
         return self.out
 
     def backward(self, dout):
-        # 일단 이게 이해가 안된다...
+        # 일단 이게 이해가 안된다...소프트맥스 미분이 왜 이렇게 구현되나?
         dx = self.out * dout
         sumdx = np.sum(dx, axis=1, keepdims=True)
         dx -= self.out * sumdx
