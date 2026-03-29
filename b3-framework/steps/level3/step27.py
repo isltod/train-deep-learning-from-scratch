@@ -9,6 +9,7 @@ from dezero.utils import plot_dot_graph
 
 
 class Sin(Function):
+    # 4칙 연산 외의 함수가 필요한 경우는 이렇게 클래스로 만들어야 하고...
     def forward(self, x):
         y = np.sin(x)
         return y
@@ -24,6 +25,7 @@ def sin(x):
 
 
 def my_sin(x, threshold=0.0001):
+    # 아무리 복잡하더라도 4칙연산 + 제곱으로 만들 수 있는 함수는 그냥 def로 처리...
     y = 0
     for i in range(100000):
         c = (-1) ** i / math.factorial(2 * i + 1)
