@@ -39,7 +39,7 @@ class Tanh(Function):
         return y
 
     def backward(self, gy):
-        a = self.outputs[0]
+        # output은 weakref로 연결하고, 약한 참조는 일반 참조와 다르게 ()로 호출해야 한다...
         y = self.outputs[0]()
         gx = gy * (1 - y * y)
         return gx
