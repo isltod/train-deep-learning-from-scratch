@@ -1,5 +1,6 @@
 import numpy as np
 from dezero.core import Function, as_variable
+from dezero import utils
 
 
 class Sin(Function):
@@ -110,3 +111,80 @@ class Transpose(Function):
 
 def transpose(x, axes=None):
     return Transpose(axes)(x)
+
+
+# 이 밑으로는 Sum 클래스 하나 도입하는데, 설명없이 막 갖다 써서 붙여놓은 것들인데...
+class BroadcastTo(Function):
+    def __init__(self, shape):
+        # 목표 shape...이걸 왜 forward에서 안받고 생성하면서 받을까?
+        # Function.__call()__ 에서 foward 호출할 때 입력 x만 넘기게 해서 인수 2 이상이면 생성자 필요한가?
+        self.shape = shape
+
+    def forward(self, x):
+        # 입력 변수 shape 저장하고, 목표 shape로 확장 공사해서 반환
+        self.x_shape = x.shape
+        y = np.broadcast_to(x, self.shape)
+        return y
+
+    def backward(self, gy):
+        # 반대로 원래 shape로 합산해서 반환
+        gx = sum_to(gy, self.x_shape)
+        return gx
+
+
+def broadcast_to(x, shape):
+    if x.shape == shape:
+        return as_variable(x)
+    return BroadcastTo(shape)(x)
+
+
+class SumTo(Function):
+    def __init__(self, shape):
+        # 이것도 목표 shape?
+        self.shape = shape
+
+    def forward(self, x):
+        # 입력 ndarray shape 받아서 저장해두고, 차원 고려해서 합산 반환
+        self.x_shape = x.shape
+        y = np.sum(x, keepdims=True)
+        return y
+
+    def backward(self, gy):
+        # 원래 입력 x의 차원
+        dim = len(self.x_shape)
+        # 이건 또 뭐냐? 미분의 shape를 리스트로 만든다...[2,3], 원래 x의 차원 - 1만큼 [1,1,...] 만들어 더해?
+        a = list(gy.shape)
+        b = a + [1] * (dim - 1)
+        gy = gy.reshape(list(gy.shape) + [1] * (dim - 1))
+        # 어쨌든 그렇게 만든 gy를 원래 x의 shape대로 확장 공사해서 반환...
+        gx = np.broadcast_to(gy, self.x_shape)
+        return gx
+
+
+def sum_to(x, shape):
+    if x.shape == shape:
+        return as_variable(x)
+    return SumTo(shape)(x)
+
+
+class Sum(Function):
+    def __init__(self, axis, keepdims):
+        self.axis = axis
+        self.keepdims = keepdims
+
+    def forward(self, x):
+        self.x_shape = x.shape
+        # 일단 이건 np.sum()일테고...
+        y = x.sum(axis=self.axis, keepdims=self.keepdims)
+        return y
+
+    def backward(self, gy):
+        # axis와 keepdims 때문에 뭔가 변할 수 있어서 미세하게 형상 조정하는 함수?
+        gy = utils.reshape_sum_backward(gy, self.x_shape, self.axis, self.keepdims)
+        # 입력변수와 shape가 같아지도록 부풀려서 반환
+        gx = broadcast_to(gy, self.x_shape)
+        return gx
+
+
+def sum(x, axis=None, keepdims=False):
+    return Sum(axis, keepdims)(x)
