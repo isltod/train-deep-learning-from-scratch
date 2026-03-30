@@ -98,3 +98,31 @@ def plot_dot_graph(output, verbose=True, to_file="graph.png"):
         return display.Image(to_file)
     except:
         pass
+
+
+# 이건 functions의 Sum을 위한 보조 함수인데...
+def reshape_sum_backward(gy, x_shape, axis, keepdims):
+    # 입력 x의 원래 shape 차원을 받아두고...(2,3) -> 2차원
+    ndim = len(x_shape)
+    # axis를 None 또는 튜플 형태로...
+    tupled_axis = axis
+    if axis is None:
+        tupled_axis = None
+    elif not isinstance(axis, tuple):
+        tupled_axis = (axis,)
+
+    # x가 스칼라가 아니고, axis도 지정되어 있고, 그런데 keepdims는 아닌 경우라..
+    if not (ndim == 0 or tupled_axis is None or keepdims):
+        # 실제 축인가? axis에서 하나씩 꺼내서 0보다 크면 그대로, 아니면 차원을 더해?
+        actual_axis = [a if a >= 0 else a + ndim for a in tupled_axis]
+        # 미분 gy의 shape에다 실제 축 원소를 하나씩 더해? 이게 무슨...
+        shape = list(gy.shape)
+        for a in sorted(actual_axis):
+            shape.insert(a, 1)
+    else:
+        # x가 스칼라거나, axis 없거나, keepdims하라고 하면 그냥 미분 shape 그대로 반환
+        shape = gy.shape
+
+    # 정해진 shape 값으로 변환해서 반환...
+    gy = gy.reshape(shape)
+    return gy
