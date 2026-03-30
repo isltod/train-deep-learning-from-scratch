@@ -47,3 +47,18 @@ class Tanh(Function):
 
 def tanh(x):
     return Tanh()(x)
+
+
+class Sum(Function):
+    def forward(self, x):
+        y = np.sum(x)
+        return y
+
+    def backward(self, gy):
+        (x,) = self.inputs
+        gx = gy * np.ones_like(x)
+        return gx
+
+
+def sum(x):
+    return Sum()(x)
