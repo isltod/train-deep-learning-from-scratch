@@ -6,6 +6,7 @@ from dezero import Variable
 import numpy as np
 import os
 import subprocess
+import dezero
 
 
 def _dot_var(v, verbose=False):
@@ -126,3 +127,22 @@ def reshape_sum_backward(gy, x_shape, axis, keepdims):
     # 정해진 shape 값으로 변환해서 반환...
     gy = gy.reshape(shape)
     return gy
+
+
+def sum_to(x, shape):
+    # shape는 넘파이 브로드캐스트 일어났던, 작은 크기의 배열...
+    ndim = len(shape)
+    # lead는 이 sum_to 처리를 하고 난 후에 바깥에 몇 차원이 남는지를 계산하는 모양인데...
+    # 즉 x의 차원에서 shape의 차원을 빼면 바깥에 남는 차원이 되는 모양인데...
+    lead = x.ndim - ndim
+    # 그걸 다 벗기기 위해서 0부터 튜플로 만들고 squeeze에서 사용
+    lead_axis = tuple(range(lead))
+
+    # 뭔가 원소 수가 1이되는 차원에 대해서만...얼마만에 나오냐에 남는 차원 더하면 합칠 차원이 되는 모양...
+    # 이게 절대로 이해가 가질 않는다...
+    axis = tuple([i + lead for i, sx in enumerate(shape) if sx == 1])
+    y = x.sum(axis=lead_axis + axis, keepdims=True)
+    if lead > 0:
+        # 그 바깥쪽 남는 차원 벗기기...
+        y = y.squeeze(lead_axis)
+    return y
