@@ -174,11 +174,19 @@ class Function:
 
 class Add(Function):
     def forward(self, x0, x1):
+        # np의 broadcast 문제에 대응하기 위해서 초기 shape 받아놓고...
+        self.x0_shape, self.x1_shape = x0.shape, x1.shape
         y = x0 + x1
         return y
 
     def backward(self, gy):
-        return gy, gy
+        gx0, gx1 = gy, gy
+        # 애초에 입력 변수들의 shape이 달랐다면 넘파이 브로드캐스트가 발생한 것이므로...
+        if self.x0_shape != self.x1_shape:
+            # 분기했던 각 변수들의 미분값을 반대로 합산 처리해서 반환
+            gx0 = dezero.functions.sum_to(gx0, self.x0_shape)
+            gx1 = dezero.functions.sum_to(gx1, self.x1_shape)
+        return gx0, gx1
 
 
 def add(x0, x1):
@@ -188,12 +196,21 @@ def add(x0, x1):
 
 class Mul(Function):
     def forward(self, x0, x1):
+        # np의 broadcast 문제에 대응하기 위해서 초기 shape 받아놓고...
+        self.x0_shape, self.x1_shape = x0.shape, x1.shape
         y = x0 * x1
         return y
 
     def backward(self, gy):
+        # 덧셈과 달리 곱셈은 반대측 입력을 곱해서 전달해야 하므로...
         x0, x1 = self.inputs
-        return gy * x1, gy * x0
+        gx0 = gy * x1
+        gx1 = gy * x0
+        if x0.shape != x1.shape:
+            # 여기도 애초 입력 변수 모양이 달랐다면 넘파이 브로드캐스트 발생한거고, 반대로 합산 반환...
+            gx0 = dezero.functions.sum_to(gx0, x0.shape)
+            gx1 = dezero.functions.sum_to(gx1, x1.shape)
+        return gx0, gx1
 
 
 def mul(x0, x1):
@@ -215,11 +232,16 @@ def neg(x):
 
 class Sub(Function):
     def forward(self, x0, x1):
+        self.x0_shape, self.x1_shape = x0.shape, x1.shape
         y = x0 - x1
         return y
 
     def backward(self, gy):
-        return gy, -gy
+        gx0, gx1 = gy, -gy
+        if self.x0_shape != self.x1_shape:
+            gx0 = dezero.functions.sum_to(gx0, self.x0_shape)
+            gx1 = dezero.functions.sum_to(gx1, self.x1_shape)
+        return gx0, gx1
 
 
 def sub(x0, x1):
@@ -241,6 +263,9 @@ class Div(Function):
         x0, x1 = self.inputs
         gx0 = gy / x1
         gx1 = gy * (-x0 / x1**2)
+        if x0.shape != x1.shape:
+            gx0 = dezero.functions.sum_to(gx0, x0.shape)
+            gx1 = dezero.functions.sum_to(gx1, x1.shape)
         return gx0, gx1
 
 

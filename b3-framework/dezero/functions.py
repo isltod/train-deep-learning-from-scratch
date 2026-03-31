@@ -121,13 +121,13 @@ class BroadcastTo(Function):
         self.shape = shape
 
     def forward(self, x):
-        # 입력 변수 shape 저장하고, 목표 shape로 확장 공사해서 반환
+        # 입력 변수 shape 저장하고, 목표 shape로 확장 공사해서 반환...numpy 버전
         self.x_shape = x.shape
         y = np.broadcast_to(x, self.shape)
         return y
 
     def backward(self, gy):
-        # 반대로 원래 shape로 합산해서 반환
+        # 반대로 원래 shape로 합산해서 반환...dezero 버전...
         gx = sum_to(gy, self.x_shape)
         return gx
 
@@ -140,24 +140,18 @@ def broadcast_to(x, shape):
 
 class SumTo(Function):
     def __init__(self, shape):
-        # 이것도 목표 shape?
+        # 이것도 목표 shape
         self.shape = shape
 
     def forward(self, x):
-        # 입력 ndarray shape 받아서 저장해두고, 차원 고려해서 합산 반환
+        # 입력 ndarray shape 받아서 저장해두고, 차원 고려해서 합산 반환...dezero 버전...
         self.x_shape = x.shape
-        y = np.sum(x, keepdims=True)
+        y = utils.sum_to(x, self.shape)
         return y
 
     def backward(self, gy):
-        # 원래 입력 x의 차원
-        dim = len(self.x_shape)
-        # 이건 또 뭐냐? 미분의 shape를 리스트로 만든다...[2,3], 원래 x의 차원 - 1만큼 [1,1,...] 만들어 더해?
-        a = list(gy.shape)
-        b = a + [1] * (dim - 1)
-        gy = gy.reshape(list(gy.shape) + [1] * (dim - 1))
-        # 어쨌든 그렇게 만든 gy를 원래 x의 shape대로 확장 공사해서 반환...
-        gx = np.broadcast_to(gy, self.x_shape)
+        # 위에서 내려온 미분 gy를 원래 형상으로 확장 공사해서 반환
+        gx = broadcast_to(gy, self.x_shape)
         return gx
 
 
