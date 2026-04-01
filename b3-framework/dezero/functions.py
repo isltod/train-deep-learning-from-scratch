@@ -199,3 +199,24 @@ class Matmul(Function):
 
 def matmul(x, W):
     return Matmul()(x, W)
+
+
+class MeanSquaredError(Function):
+    def forward(self, x0, x1):
+        diff = x0 - x1
+        y = (diff**2).sum() / len(diff)
+        return y
+
+    def backward(self, gy):
+        x0, x1 = self.inputs
+        diff = x0 - x1
+        # sum()은 gy를 gx 원소들 각각에 곱하는 걸로(분기, 브로드캐스트) 돌리고,
+        # N = len(diff)는 상수니 그대로, diff^2은 2diff로...
+        gx0 = gy * diff * (2.0 / len(diff))
+        # 뒤 변수는 앞과 같지만 - 기호만 추가...
+        gx1 = -gx0
+        return gx0, gx1
+
+
+def mean_squared_error(x0, x1):
+    return MeanSquaredError()(x0, x1)
