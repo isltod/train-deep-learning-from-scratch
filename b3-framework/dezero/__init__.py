@@ -16,6 +16,8 @@ else:
     from dezero.core import as_array
     from dezero.core import as_variable
     from dezero.core import setup_variable
+    from dezero.core import Parameter
+
 
 # 근데 이걸 쓰려면 add, radd 등을 여기서 import 안해놔도 되나?
 setup_variable()
