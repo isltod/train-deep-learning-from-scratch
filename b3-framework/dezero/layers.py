@@ -11,8 +11,8 @@ class Layer:
 
     # 인스턴스 변수를 설정할 때 호출되는 메서드...
     def __setattr__(self, name, value):
-        # 값이 매개변수일 때, 값이 아니라 이름을 저장한다...그럼 그걸로 dict가 된다...
-        if isinstance(value, Parameter):
+        # 값이 매개변수 또는 레이어일 때, 값이 아니라 이름을 저장한다...그럼 그걸로 dict가 된다...
+        if isinstance(value, (Parameter, Layer)):
             self._params.add(name)
         super().__setattr__(name, value)
 
@@ -30,8 +30,15 @@ class Layer:
 
     def params(self):
         for name in self._params:
-            # yield는 작업 종료 없이 return, 그래서 for 문 등에서 쓰는구만...
-            yield getattr(self, name)
+            obj = self.__dict__[name]
+
+            if isinstance(obj, Layer):
+                # yield는 작업 종료 없이 return, 그래서 for 문 등에서 쓰는구만...
+                # yield를 사용하는 함수를 제너레이터라고 한다고...
+                # yield from은 다른 제너레이터나 반복 객체에서 하나씩 꺼내 반환
+                yield from obj.params()
+            else:
+                yield obj
 
     def cleargrads(self):
         for param in self.params():
