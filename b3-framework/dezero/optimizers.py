@@ -48,6 +48,7 @@ class MomentumSGD(Optimizer):
         self.vs = {}
 
     def update_one(self, param):
+        # 속도 v의 키는 객체 식별자를 이용...
         v_key = id(param)
         # 처음에는 v가 없으니 가중치와 같은 모양의 0 행렬 만들고
         if v_key not in self.vs:
