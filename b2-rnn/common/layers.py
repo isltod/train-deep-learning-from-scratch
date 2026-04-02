@@ -111,7 +111,7 @@ class Softmax:
         return self.out
 
     def backward(self, dout):
-        # 일단 이게 이해가 안된다...소프트맥스 미분이 왜 이렇게 구현되나?
+        # Softmax 미분 수식과 코드 참고...
         dx = self.out * dout
         sumdx = np.sum(dx, axis=1, keepdims=True)
         dx -= self.out * sumdx

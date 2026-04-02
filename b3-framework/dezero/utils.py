@@ -146,3 +146,15 @@ def sum_to(x, shape):
         # 그 바깥쪽 남는 차원 벗기기...
         y = y.squeeze(lead_axis)
     return y
+
+
+def logsumexp(x, axis=1):
+    # 이건 오버플로 방지책같고...
+    m = x.max(axis=axis, keepdims=True)
+    y = x - m
+    # y = np.exp(y)를 말하는 것 같고...결과는 exp(x)/exp(m)
+    np.exp(y, out=y)
+    # 전체 합인데...Sigma(exp(xi))/exp(m) -> 로그 취하면 log(Sigma) - m
+    s = y.sum(axis=axis, keepdims=True)
+    # 거기에 m 더하면 결국 원래 x의 log(exp sum)이 된다..이런 얘기..
+    return m + np.log(s)
