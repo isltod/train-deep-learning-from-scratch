@@ -296,3 +296,156 @@ def sigmoid_simple(x):
     x = as_variable(x)
     y = 1 / (1 + exp(-x))
     return y
+
+
+class GetItem(Function):
+    def __init__(self, slices):
+        self.slices = slices
+
+    def forward(self, x):
+        # 그냥 보통의 넘파이 슬라이싱, 이 부분만 선택한다는 건데...
+        # 결국 x를 x0, x1으로 쪼개고(역전파는 더하기), 각각에 0과 1을 곱한다(역전파도 0과 1 곱하기)는 얘기...
+        y = x[self.slices]
+        return y
+
+    def backward(self, gy):
+        (x,) = self.inputs
+        # 역전파 미분은 그 선택 슬라이스와 원래 입력의 모양을 가지고...
+        f = GetItemGrad(self.slices, x.shape)
+        return f(gy)
+
+
+def get_item(x, slices):
+    f = GetItem(slices)
+    return f(x)
+
+
+class GetItemGrad(Function):
+    def __init__(self, slices, in_shape):
+        self.slices = slices
+        self.in_shape = in_shape
+
+    def forward(self, gy):
+        # 원래 모양의 0 행렬에, 선택했던 부분만 위에서 받은 미분을 넣어준다...
+        # 1 곱했던 부분에 1 곱해주고, 그걸 0 곱했던 부분과 더한다 정도...
+        gx = np.zeros(self.in_shape)
+        np.add.at(gx, self.slices, gy)
+        return gx
+
+    def backward(self, ggx):
+        return get_item(ggx, self.slices)
+
+
+class Softmax(Function):
+    def __init__(self, axis=1):
+        self.axis = axis
+
+    def forward(self, x):
+        # 여긴 forward니까 x는 넘파이...
+        y = x - x.max(axis=self.axis, keepdims=True)
+        y = np.exp(y)
+        y /= y.sum(axis=self.axis, keepdims=True)
+        return y
+
+    def backward(self, gy):
+        # 약한 참조니까 ()로 출력 변수 받고
+        y = self.outputs[0]()
+        # Softmax 미분 수식과 코드 참고...
+        gx = y * gy
+        sumdx = gx.sum(axis=self.axis, keepdims=True)
+        gx -= y * sumdx
+        return gx
+
+
+def softmax(x, axis=1):
+    return Softmax(axis)(x)
+
+
+class Clip(Function):
+    def __init__(self, x_min, x_max):
+        self.x_min = x_min
+        self.x_max = x_max
+
+    def forward(self, x):
+        # x의 값들을 min~max 사이로 맞추기
+        y = np.clip(x, self.x_min, self.x_max)
+        return y
+
+    def backward(self, gy):
+        (x,) = self.inputs
+        # 그럼 이 경우 미분은 min max 사이의 유효 x에만 곱하기 1로 봐야 하나? 나머진 0?
+        mask = (x.data >= self.x_min) * (x.data <= self.x_max)
+        gx = gy * mask
+        return gx
+
+
+def clip(x, x_min, x_max):
+    return Clip(x_min, x_max)(x)
+
+
+class Log(Function):
+    def forward(self, x):
+        # forward는 넘파이 로그
+        y = np.log(x)
+        return y
+
+    def backward(self, gy):
+        (x,) = self.inputs
+        # backward는 dezero의 나누기로 1/x
+        gx = gy / x
+        return gx
+
+
+def log(x):
+    return Log()(x)
+
+
+def softmax_cross_entropy_simple(x, t):
+    # x는 벡터, t는 스칼라로 인덱스?
+    x, t = as_variable(x), as_variable(t)
+    # N은 배치 수?
+    N = x.shape[0]
+    p = softmax(x)
+    # log(0)을 방지한다...그냥 min으로 하면 안되나?
+    p = clip(p, 1e-15, 1.0)
+    log_p = log(p)
+    # log_p에서 배치 수대로 돌면서 t 인덱스의 정답만 추출...
+    tlog_p = log_p[np.arange(N), t.data]
+    # 평균 손실 반환
+    y = -1 * sum(tlog_p) / N
+    return y
+
+
+class SoftmaxCrossEntropy(Function):
+    # x는 모델 예측 결과 y(이게 클래스 별 점수), t는 정답 위치 스칼라
+    def forward(self, x, t):
+        # 이건 배치 갯수...
+        N = x.shape[0]
+        # softmax cross entropy가 생각해보면...
+        # log(exp(xi) / sum(exp(x))) = log(exp(xi)) - log(sum(exp(x))) = xi - log(exp(x1) + exp(x2) + ...)
+        # 따라서 뒤 log sum exp 부분을 먼저 구하고
+        log_z = utils.logsumexp(x, axis=1)
+        # 그걸 x에서 빼면 SCE...
+        log_p = x - log_z
+        # 이건 배치 별로 정답지 뽑는거고...
+        log_p = log_p[np.arange(N), t.data]
+        y = -np.sum(log_p) / N
+        return y
+
+    def backward(self, gy):
+        (x, t) = self.inputs
+        # 원래 입력 x(사실 y)가 배치 * 클래스
+        N, CLS_NUM = x.shape
+        # 이건 평균 구한 부분 보충, 결국 1/N 곱하기였으니까...
+        gy *= 1 / N
+        y = softmax(x)
+        # 여긴 선택 없이 그냥 쿠파이 쓰라는데...문제가 좀 있네 코드가...
+        # 암튼 정답지 원핫 인코딩 만드는 코드인 듯...
+        t_onehot = np.eye(CLS_NUM, dtype=t.dtype)[t.data]
+        # SCE 미분은 y-t...해당 위치에서...
+        y = (y - t_onehot) * gy
+        return y
+
+
+def softmax_cross_entropy(x, t):
+    return SoftmaxCrossEntropy()(x, t)
