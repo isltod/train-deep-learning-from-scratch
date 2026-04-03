@@ -7,6 +7,11 @@ import numpy as np
 import os
 import subprocess
 import dezero
+from urllib import request
+import urllib.request
+
+
+TMP_DIR = "b3-framework\\tmp"
 
 
 def _dot_var(v, verbose=False):
@@ -78,17 +83,16 @@ def plot_dot_graph(output, verbose=True, to_file="graph.png"):
 
     # tmp_dir = os.path.join(os.path.expanduser("~"), ".dezero")
     # 책과는 다르게 tmp 폴더 만들고 거기로 보내보자...
-    tmp_dir = "b3-framework\\tmp"
-    if not os.path.exists(tmp_dir):
-        os.mkdir(tmp_dir)
-    graph_path = os.path.join(tmp_dir, "tmp_graph.dot")
+    if not os.path.exists(TMP_DIR):
+        os.mkdir(TMP_DIR)
+    graph_path = os.path.join(TMP_DIR, "tmp_graph.dot")
 
     with open(graph_path, "w") as f:
         f.write(dot_graph)
 
     extension = os.path.splitext(to_file)[1][1:]
     # 책과는 다르게 그림파일도 tmp 폴더에 보내자...
-    to_file = os.path.join(tmp_dir, to_file)
+    to_file = os.path.join(TMP_DIR, to_file)
     cmd = "dot {} -T {} -o {}".format(graph_path, extension, to_file)
     subprocess.run(cmd, shell=True)
 
@@ -158,3 +162,41 @@ def logsumexp(x, axis=1):
     s = y.sum(axis=axis, keepdims=True)
     # 거기에 m 더하면 결국 원래 x의 log(exp sum)이 된다..이런 얘기..
     return m + np.log(s)
+
+
+def show_progress(block_num, block_size, total_size):
+    bar_template = "\r[{}] {:.2f}%"
+
+    downloaded = block_num * block_size
+    p = downloaded / total_size * 100
+    i = int(downloaded / total_size * 30)
+    if p >= 100.0:
+        p = 100.0
+    if i >= 30:
+        i = 30
+    bar = "#" * i + "." * (30 - i)
+    sys.stdout.write(bar_template.format(bar, p))
+    sys.stdout.flush()
+
+
+def get_file(url, file_name=None):
+    if file_name is None:
+        file_name = url[url.rfind("/") + 1 :]
+    file_path = os.path.join(TMP_DIR, file_name)
+
+    if not os.path.exists(TMP_DIR):
+        os.mkdir(TMP_DIR)
+
+    if os.path.exists(file_path):
+        return file_path
+
+    print("Downloading:", file_name)
+    try:
+        urllib.request.urlretrieve(url, file_path, show_progress)
+    except (Exception, KeyboardInterrupt) as e:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        raise
+    print(" Done")
+
+    return file_path
