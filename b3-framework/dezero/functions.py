@@ -428,8 +428,8 @@ class SoftmaxCrossEntropy(Function):
         # 그걸 x에서 빼면 SCE...
         log_p = x - log_z
         # 이건 배치 별로 정답지 뽑는거고...
-        log_p = log_p[np.arange(N), t.data]
-        y = -np.sum(log_p) / N
+        log_p = log_p[np.arange(N), t.ravel()]
+        y = -log_p.sum() / np.float32(N)
         return y
 
     def backward(self, gy):
@@ -457,3 +457,19 @@ def accuracy(y, t):
     pred = y.data.argmax(axis=1).reshape(t.shape)
     result = (pred == t.data).mean()
     return Variable(as_array(result))
+
+
+class ReLU(Function):
+    def forward(self, x):
+        y = np.maximum(x, 0.0)
+        return y
+
+    def backward(self, gy):
+        (x,) = self.inputs
+        mask = x.data > 0
+        gx = gy * mask
+        return gx
+
+
+def relu(x):
+    return ReLU()(x)
