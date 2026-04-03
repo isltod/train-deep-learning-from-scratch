@@ -19,6 +19,8 @@ else:
     from dezero.core import Parameter
     from dezero.layers import Layer
     from dezero.models import Model
+    from dezero.datasets import Dataset
+    from dezero.dataloaders import DataLoader
 
 
 # 근데 이걸 쓰려면 add, radd 등을 여기서 import 안해놔도 되나?
