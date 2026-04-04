@@ -3,6 +3,13 @@ import dezero
 import numpy as np
 import weakref
 
+try:
+    import cupy as cp
+
+    array_types = (np.ndarray, cp.ndarray)
+except ImportError:
+    array_types = np.ndarray
+
 
 class Config:
     enable_backprop = True
@@ -27,10 +34,8 @@ class Variable:
 
     def __init__(self, data, name=None):
         if data is not None:
-            if not isinstance(data, np.ndarray):
-                raise TypeError(
-                    f"{type(data)}은(는) 지원하지 않습니다. numpy.ndarray를 입력해주세요."
-                )
+            if not isinstance(data, array_types):
+                raise TypeError(f"{type(data)} 타입은 지원되지 않습니다.")
 
         self.data = data
         self.name = name
@@ -69,8 +74,9 @@ class Variable:
 
     def backward(self, retain_grad=False, create_graph=False):
         if self.grad is None:
+            xp = dezero.cuda.get_array_module(self.data)
             # np를 한 번 더 감싸면 grad가 Variable이 되서, 이 backward를 호출하고 creator를 사용할 수 있게 된다...
-            self.grad = Variable(np.ones_like(self.data))
+            self.grad = Variable(xp.ones_like(self.data))
 
         funcs = []
         seen_set = set()
@@ -131,10 +137,18 @@ class Variable:
     def sum(self, axis=None, keepdims=False):
         return dezero.functions.sum(self, axis, keepdims)
 
+    def to_cpu(self):
+        if self.data is not None:
+            self.data = dezero.cuda.as_numpy(self.data)
 
-def as_array(x):
+    def to_gpu(self):
+        if self.data is not None:
+            self.data = dezero.cuda.as_cupy(self.data)
+
+
+def as_array(x, array_module=np):
     if np.isscalar(x):
-        return np.array(x)
+        return array_module.array(x)
     return x
 
 
@@ -174,7 +188,7 @@ class Function:
 
 class Add(Function):
     def forward(self, x0, x1):
-        # np의 broadcast 문제에 대응하기 위해서 초기 shape 받아놓고...
+        # broadcast 문제에 대응하기 위해서 초기 shape 받아놓고...
         self.x0_shape, self.x1_shape = x0.shape, x1.shape
         y = x0 + x1
         return y
@@ -190,14 +204,12 @@ class Add(Function):
 
 
 def add(x0, x1):
-    x1 = as_array(x1)
+    x1 = as_array(x1, dezero.cuda.get_array_module(x0.data))
     return Add()(x0, x1)
 
 
 class Mul(Function):
     def forward(self, x0, x1):
-        # np의 broadcast 문제에 대응하기 위해서 초기 shape 받아놓고...
-        self.x0_shape, self.x1_shape = x0.shape, x1.shape
         y = x0 * x1
         return y
 
@@ -214,7 +226,7 @@ class Mul(Function):
 
 
 def mul(x0, x1):
-    x1 = as_array(x1)
+    x1 = as_array(x1, dezero.cuda.get_array_module(x0.data))
     return Mul()(x0, x1)
 
 
@@ -245,12 +257,12 @@ class Sub(Function):
 
 
 def sub(x0, x1):
-    x1 = as_array(x1)
+    x1 = as_array(x1, dezero.cuda.get_array_module(x0.data))
     return Sub()(x0, x1)
 
 
 def rsub(x0, x1):
-    x1 = as_array(x1)
+    x1 = as_array(x1, dezero.cuda.get_array_module(x0.data))
     return Sub()(x1, x0)
 
 
@@ -270,12 +282,12 @@ class Div(Function):
 
 
 def div(x0, x1):
-    x1 = as_array(x1)
+    x1 = as_array(x1, dezero.cuda.get_array_module(x0.data))
     return Div()(x0, x1)
 
 
 def rdiv(x0, x1):
-    x1 = as_array(x1)
+    x1 = as_array(x1, dezero.cuda.get_array_module(x0.data))
     return Div()(x1, x0)
 
 
@@ -288,7 +300,7 @@ class Pow(Function):
         return y
 
     def backward(self, gy):
-        x = self.inputs[0]
+        (x,) = self.inputs
         c = self.c
         gx = c * x ** (c - 1) * gy
         return gx

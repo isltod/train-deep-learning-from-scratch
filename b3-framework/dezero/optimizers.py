@@ -1,5 +1,5 @@
 import math
-import numpy as np
+from dezero import cuda
 
 
 class Optimizer:
@@ -53,7 +53,8 @@ class MomentumSGD(Optimizer):
         v_key = id(param)
         # 처음에는 v가 없으니 가중치와 같은 모양의 0 행렬 만들고
         if v_key not in self.vs:
-            self.vs[v_key] = np.zeros_like(param.data)
+            xp = cuda.get_array_module(param.data)
+            self.vs[v_key] = xp.zeros_like(param.data)
 
         # 385쪽 식 46.1
         v = self.vs[v_key] * self.momentum - self.lr * param.grad.data
@@ -83,10 +84,11 @@ class Adam(Optimizer):
         return self.alpha * math.sqrt(fix2) / fix1
 
     def update_one(self, param):
+        xp = cuda.get_array_module(param.data)
         key = id(param)
         if key not in self.ms:
-            self.ms[key] = np.zeros_like(param.data)
-            self.vs[key] = np.zeros_like(param.data)
+            self.ms[key] = xp.zeros_like(param.data)
+            self.vs[key] = xp.zeros_like(param.data)
 
         m, v = self.ms[key], self.vs[key]
         beta1, beta2, eps = self.beta1, self.beta2, self.eps
@@ -94,4 +96,4 @@ class Adam(Optimizer):
 
         m += (1 - beta1) * (grad - m)
         v += (1 - beta2) * (grad * grad - v)
-        param.data -= self.lr * m / (np.sqrt(v) + eps)
+        param.data -= self.lr * m / (xp.sqrt(v) + eps)

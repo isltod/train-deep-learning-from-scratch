@@ -1,16 +1,19 @@
 import numpy as np
 from dezero.core import Variable, Function, as_variable, as_array
 from dezero import utils
+from dezero import cuda
 
 
 class Sin(Function):
     def forward(self, x):
-        y = np.sin(x)
+        xp = cuda.get_array_module(x)
+        y = xp.sin(x)
         return y
 
     def backward(self, gy):
         # 이걸 그냥 x로 받으면 튜플 또는 리스트 객체가 담긴다...그 안의 Variable 받으려면 튜플로 받아야된다...
         (x,) = self.inputs
+        # backward 함수들은 대부분? 다? Variable 함수들이므로 cupy 변경은 forward 만...
         gx = gy * cos(x)
         return gx
 
@@ -21,7 +24,8 @@ def sin(x):
 
 class Cos(Function):
     def forward(self, x):
-        y = np.cos(x)
+        xp = cuda.get_array_module(x)
+        y = xp.cos(x)
         return y
 
     def backward(self, gy):
@@ -36,7 +40,8 @@ def cos(x):
 
 class Tanh(Function):
     def forward(self, x):
-        y = np.tanh(x)
+        xp = cuda.get_array_module(x)
+        y = xp.tanh(x)
         return y
 
     def backward(self, gy):
@@ -51,18 +56,23 @@ def tanh(x):
 
 
 class Sum(Function):
+    def __init__(self, axis, keepdims):
+        self.axis = axis
+        self.keepdims = keepdims
+
     def forward(self, x):
-        y = np.sum(x)
+        self.x_shape = x.shape
+        y = x.sum(axis=self.axis, keepdims=self.keepdims)
         return y
 
     def backward(self, gy):
-        (x,) = self.inputs
-        gx = gy * np.ones_like(x)
+        gy = utils.reshape_sum_backward(gy, self.x_shape, self.axis, self.keepdims)
+        gx = broadcast_to(gy, self.x_shape)
         return gx
 
 
-def sum(x):
-    return Sum()(x)
+def sum(x, axis=None, keepdims=False):
+    return Sum(axis, keepdims)(x)
 
 
 class Reshape(Function):
@@ -123,7 +133,8 @@ class BroadcastTo(Function):
     def forward(self, x):
         # 입력 변수 shape 저장하고, 목표 shape로 확장 공사해서 반환...numpy 버전
         self.x_shape = x.shape
-        y = np.broadcast_to(x, self.shape)
+        xp = cuda.get_array_module(x)
+        y = xp.broadcast_to(x, self.shape)
         return y
 
     def backward(self, gy):
@@ -260,7 +271,8 @@ def linear_simple(x, W, b=None):
 # e^x는 순전파도 역전파도 e^x
 class Exp(Function):
     def forward(self, x):
-        y = np.exp(x)
+        xp = cuda.get_array_module(x)
+        y = xp.exp(x)
         return y
 
     def backward(self, gy):
@@ -277,7 +289,11 @@ def exp(x):
 
 class Sigmoid(Function):
     def forward(self, x):
-        y = 1 / (1 + np.exp(-x))
+        xp = cuda.get_array_module(x)
+        # y = 1 / (1 + np.exp(-x))
+        # 위 보다는 아래가 더 나은 성능이라는데...
+        y = xp.tanh(x * 0.5) * 0.5 + 0.5
+
         return y
 
     def backward(self, gy):
@@ -328,8 +344,14 @@ class GetItemGrad(Function):
     def forward(self, gy):
         # 원래 모양의 0 행렬에, 선택했던 부분만 위에서 받은 미분을 넣어준다...
         # 1 곱했던 부분에 1 곱해주고, 그걸 0 곱했던 부분과 더한다 정도...
-        gx = np.zeros(self.in_shape)
-        np.add.at(gx, self.slices, gy)
+        xp = cuda.get_array_module(gy)
+        gx = xp.zeros(self.in_shape)
+
+        if xp is np:
+            np.add.at(gx, self.slices, gy)
+        else:
+            cuda.cupyx.scatter_add(gx, self.slices, gy)
+
         return gx
 
     def backward(self, ggx):
@@ -341,9 +363,10 @@ class Softmax(Function):
         self.axis = axis
 
     def forward(self, x):
-        # 여긴 forward니까 x는 넘파이...
+        # 여긴 forward니까 x는 넘파이 또는 쿠파이...
         y = x - x.max(axis=self.axis, keepdims=True)
-        y = np.exp(y)
+        xp = cuda.get_array_module(x)
+        y = xp.exp(y)
         y /= y.sum(axis=self.axis, keepdims=True)
         return y
 
@@ -367,8 +390,9 @@ class Clip(Function):
         self.x_max = x_max
 
     def forward(self, x):
+        xp = cuda.get_array_module(x)
         # x의 값들을 min~max 사이로 맞추기
-        y = np.clip(x, self.x_min, self.x_max)
+        y = xp.clip(x, self.x_min, self.x_max)
         return y
 
     def backward(self, gy):
@@ -385,8 +409,8 @@ def clip(x, x_min, x_max):
 
 class Log(Function):
     def forward(self, x):
-        # forward는 넘파이 로그
-        y = np.log(x)
+        xp = cuda.get_array_module(x)
+        y = xp.log(x)
         return y
 
     def backward(self, gy):
@@ -439,9 +463,9 @@ class SoftmaxCrossEntropy(Function):
         # 이건 평균 구한 부분 보충, 결국 1/N 곱하기였으니까...
         gy *= 1 / N
         y = softmax(x)
-        # 여긴 선택 없이 그냥 쿠파이 쓰라는데...문제가 좀 있네 코드가...
         # 암튼 정답지 원핫 인코딩 만드는 코드인 듯...
-        t_onehot = np.eye(CLS_NUM, dtype=t.dtype)[t.data]
+        xp = cuda.get_array_module(t.data)
+        t_onehot = xp.eye(CLS_NUM, dtype=t.dtype)[t.data]
         # SCE 미분은 y-t...해당 위치에서...
         y = (y - t_onehot) * gy
         return y
@@ -461,7 +485,8 @@ def accuracy(y, t):
 
 class ReLU(Function):
     def forward(self, x):
-        y = np.maximum(x, 0.0)
+        xp = cuda.get_array_module(x)
+        y = xp.maximum(x, 0.0)
         return y
 
     def backward(self, gy):
