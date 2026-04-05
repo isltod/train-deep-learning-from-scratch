@@ -1,7 +1,9 @@
 from dezero import cuda
 from dezero import Parameter
+from dezero import utils
 import dezero.functions as F
 import numpy as np
+import os
 import weakref
 
 
@@ -52,6 +54,62 @@ class Layer:
     def to_gpu(self):
         for param in self.params():
             param.to_gpu()
+
+    # params_dict라는 걸 받아서, 거기에 키를 만들고 현재 __dict__를 넣는다?
+    def _flatten_params(self, params_dict, parent_key=""):
+        # 레이어, 가중치들 이름으로 돌면서...
+        for name in self._params:
+            # 만든 인스턴스 변수들이 담겨있는 사전...
+            obj = self.__dict__[name]
+            key = parent_key + "/" + name if parent_key else name
+
+            # 레이어면 다시 재귀호출로, 아니고 가중치면 그 값을 사전에 담기...
+            # 사전은 참조변수로 밖에서 이용...
+            if isinstance(obj, Layer):
+                obj._flatten_params(params_dict, key)
+            else:
+                params_dict[key] = obj
+
+    def save_weights(self, path):
+        # 파일은 임시 저장소에 넣자...
+        if not os.path.exists(utils.TMP_DIR):
+            os.mkdir(utils.TMP_DIR)
+        path = os.path.join(utils.TMP_DIR, path)
+
+        # 먼저 cupy면 numpy 변수로 변경하고 저장
+        self.to_cpu()
+
+        params_dict = {}
+        self._flatten_params(params_dict)
+        # 매개변수는 Parameter 클래스, 넘파이 배열은 그 data
+        array_dict = {
+            key: param.data for key, param in params_dict.items() if param is not None
+        }
+
+        # KeyboardInterrupt는 Ctrl+C 같은 키로 중단시킬 때...
+        try:
+            np.savez_compressed(path, **array_dict)
+        except (Exception, KeyboardInterrupt) as e:
+            # 쓰다 만 데이터는 지운다...
+            if os.path.exists(path):
+                os.remove(path)
+            raise
+
+    # 레이어부터 쌓아주는 것이 아니라,
+    # 기본 레이어 구조는 다 만들어놓고, 거기에 매개변수만 저장 값으로 채우기...
+    def load_weights(self, path):
+        # 파일은 항상 임시 디렉토리에서 읽자...없으면 그냥 돌아가기
+        path = os.path.join(utils.TMP_DIR, path)
+        if not os.path.exists(path):
+            return
+
+        npz = np.load(path)
+        params_dict = {}
+        # 그래서 현재 레이어 구조의 매개변수들을 참조 변수로 가져오고
+        self._flatten_params(params_dict)
+        for key, param in params_dict.items():
+            # 그 매개변수들에 같은 키의 저장값을 넣어주기...
+            param.data = npz[key]
 
 
 class Linear(Layer):
