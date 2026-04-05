@@ -13,6 +13,7 @@ except ImportError:
 
 class Config:
     enable_backprop = True
+    train = True
 
 
 @contextlib.contextmanager
@@ -27,6 +28,10 @@ def using_config(name, value):
 
 def no_grad():
     return using_config("enable_backprop", False)
+
+
+def test_mode():
+    return using_config("train", False)
 
 
 class Variable:
