@@ -5,7 +5,13 @@ from dezero.functions import linear, broadcast_to
 from dezero.utils import get_conv_outsize, get_deconv_outsize, pair
 
 
-def _im2col(img, kernel_size, stride, pad, to_matrix=True):
+# _im2col_gpu/_col2im_gpu, im2col_array/col2im_array 네 개가 실제 핵심 함수고,
+# im2col_array/col2im_array가 책임지고 gpu 연산의 경우는 _im2col_gpu/_col2im_gpu로 보내는 로직
+# im2col은 입력 데이터를 배치크기 x 커널크기로 반복 리셈플링,
+# col2im은 반대로 배치크기 x 커널크기 리샘플링 결과를 원래 배치x채널x세로x가로 데이터로 되돌리기...
+# 이 경우 forward는 im2col, backward 미분은 반대 col2im이고,
+# im2col은 분기라서 col2im은 선택이 아니고 더해 넣는다...
+def _im2col_gpu(img, kernel_size, stride, pad, to_matrix=True):
     n, c, h, w = img.shape
     kh, kw = pair(kernel_size)
     sy, sx = pair(stride)
@@ -45,6 +51,42 @@ def _im2col(img, kernel_size, stride, pad, to_matrix=True):
     return col
 
 
+def _col2im_gpu(col, sy, sx, ph, pw, h, w):
+    n, c, kh, kw, out_h, out_w = col.shape
+    dy, dx = 1, 1
+    img = cuda.cupy.empty((n, c, h, w), dtype=col.dtype)
+
+    cuda.cupy.ElementwiseKernel(
+        "raw T col, int32 h, int32 w, int32 out_h, int32 out_w,"
+        "int32 kh, int32 kw, int32 sy, int32 sx, int32 ph, int32 pw,"
+        "int32 dx, int32 dy",
+        "T img",
+        """
+           int c0 = i / (h * w);
+           int y  = i / w % h;
+           int x  = i % w;
+           T val = 0;
+           for (int ky = 0; ky < kh; ++ky) {
+             int out_y = (y + ph - ky * dy);
+             if (0 > out_y || out_y >= out_h * sy) continue;
+             if (out_y % sy != 0) continue;
+             out_y /= sy;
+             for (int kx = 0; kx < kw; ++kx) {
+               int out_x = (x + pw - kx * dx);
+               if (0 > out_x || out_x >= out_w * sx) continue;
+               if (out_x % sx != 0) continue;
+               out_x /= sx;
+               int k = out_y + out_h * (kx + kw * (ky + kh * c0));
+               val = val + col[out_x + out_w * k];
+             }
+           }
+           img = val;
+        """,
+        "col2im",
+    )(col.reduced_view(), h, w, out_h, out_w, kh, kw, sy, sx, ph, pw, dx, dy, img)
+    return img
+
+
 def im2col_array(img, kernel_size, stride, pad, to_matrix=True):
     # 배치, 채널, 세로, 가로
     N, C, H, W = img.shape
@@ -58,7 +100,7 @@ def im2col_array(img, kernel_size, stride, pad, to_matrix=True):
     xp = cuda.get_array_module(img)
     if xp != np:
         # 쿠파이 버전이면 _im2col로 보내는데, 이게 뭘 하는건지 모르겠다...
-        col = _im2col(img, kernel_size, stride, pad)
+        col = _im2col_gpu(img, kernel_size, stride, pad)
     else:
         # 아니면 넘파이에서 해결하는데...
         # 패딩 넣기, 인수는 원본 배열, 패딩 크기, 값
@@ -87,8 +129,36 @@ def im2col_array(img, kernel_size, stride, pad, to_matrix=True):
     return col
 
 
+def col2im_array(col, img_shape, kernel_size, stride, pad, to_matrix=True):
+    N, C, H, W = img_shape
+    KH, KW = pair(kernel_size)
+    SH, SW = pair(stride)
+    PH, PW = pair(pad)
+    OH = get_conv_outsize(H, KH, SH, PH)
+    OW = get_conv_outsize(W, KW, SW, PW)
+
+    if to_matrix:
+        col = col.reshape(N, OH, OW, C, KH, KW).transpose(0, 3, 4, 5, 1, 2)
+
+    xp = cuda.get_array_module(col)
+    if xp != np:
+        img = _col2im_gpu(col, SH, SW, PH, PW, H, W)
+        return img
+    else:
+        img = np.zeros(
+            (N, C, H + 2 * PH + SH - 1, W + 2 * PW + SW - 1), dtype=col.dtype
+        )
+        for j in range(KH):
+            j_lim = j + SH * OH
+            for i in range(KW):
+                i_lim = i + SW * OW
+                img[:, :, j:j_lim:SH, i:i_lim:SW] += col[:, :, j, i, :, :]
+        return img[:, :, PH : H + PH, PW : W + PW]
+
+
 class Im2col(Function):
     def __init__(self, kernel_size, stride, pad, to_matrix=True):
+        super().__init__()
         self.input_shape = None
         self.kernel_size = kernel_size
         self.stride = stride
@@ -97,8 +167,12 @@ class Im2col(Function):
 
     def forward(self, x):
         self.input_shape = x.shape
-        xp = cuda.get_array_module(x)
-        self.x_shape = x.shape
+        y = im2col_array(x, self.kernel_size, self.stride, self.pad, self.to_matrix)
+        return y
+
+    def backward(self, gy):
+        gx = col2im(gy, *self.input_shape, self.kernel_size, self.stride, self.pad)
+        return gx
 
 
 def im2col(x, kernel_size, stride, pad, to_matrix=True):
@@ -106,14 +180,23 @@ def im2col(x, kernel_size, stride, pad, to_matrix=True):
 
 
 class Col2im(Function):
-    def __init__(self, kernel_size, stride, pad):
+    def __init__(self, input_shape, kernel_size, stride, pad, to_matrix):
+        super().__init__()
+        self.input_shape = input_shape
         self.kernel_size = kernel_size
         self.stride = stride
         self.pad = pad
+        self.to_matrix = to_matrix
 
     def forward(self, x):
-        xp = cuda.get_array_module(x)
-        self.x_shape = x.shape
+        y = col2im_array(
+            x, self.input_shape, self.kernel_size, self.stride, self.pad, self.to_matrix
+        )
+        return y
+
+    def backward(self, gy):
+        gx = im2col_array(gy, self.kernel_size, self.stride, self.pad, self.to_matrix)
+        return gx
 
 
 def col2im(x, kernel_size, stride, pad):
