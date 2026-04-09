@@ -130,21 +130,28 @@ def im2col_array(img, kernel_size, stride, pad, to_matrix=True):
 
 
 def col2im_array(col, img_shape, kernel_size, stride, pad, to_matrix=True):
+    # 배치, 채널, 세로, 가로
     N, C, H, W = img_shape
+    # 커널, 스트라이드, 패드 크기 받아서 출력 크기 결정
     KH, KW = pair(kernel_size)
     SH, SW = pair(stride)
     PH, PW = pair(pad)
     OH = get_conv_outsize(H, KH, SH, PH)
     OW = get_conv_outsize(W, KW, SW, PW)
 
+    # 행렬 형태로 반환하라고 했으면...
+    # 3차원 이상 텐서에서 축 순서를 지정해서 전치 - 필터에 적용될 이미지 세로, 가로를 앞으로, 다음 채널, 그리고 필터 위치
+    # 그리고는 2차원으로 다 묶는다... 행은 배치 갯수 x 출력 세로 x 출력 가로, 나머지는 다 열로(필터 크기, 채널 수)
     if to_matrix:
         col = col.reshape(N, OH, OW, C, KH, KW).transpose(0, 3, 4, 5, 1, 2)
 
     xp = cuda.get_array_module(col)
     if xp != np:
+        # 쿠파이 버전이면 _im2col로 보내는데, 이게 뭘 하는건지 모르겠다...
         img = _col2im_gpu(col, SH, SW, PH, PW, H, W)
         return img
     else:
+        # 아니면 넘파이에서 해결하는데...좀 더 남게 원래 이미지를 0행렬로 만든다..왜 남게 하지?
         img = np.zeros(
             (N, C, H + 2 * PH + SH - 1, W + 2 * PW + SW - 1), dtype=col.dtype
         )
@@ -152,7 +159,11 @@ def col2im_array(col, img_shape, kernel_size, stride, pad, to_matrix=True):
             j_lim = j + SH * OH
             for i in range(KW):
                 i_lim = i + SW * OW
+                # 모든 배치의 모든 채널에 대해, 0번째 위치부터 필터 크기까지를, 각 위치 인덱스에 더한다...
+                # forward 분기의 역전파니까 더한다...
+                # y:y_max:stride -> y부터 y_max 전까지 stride로 건너뛰면서
                 img[:, :, j:j_lim:SH, i:i_lim:SW] += col[:, :, j, i, :, :]
+        # 그리고는 원래 이미지 shape대로 잘라서 반환한다...패딩 효과가 뭔가 있나?
         return img[:, :, PH : H + PH, PW : W + PW]
 
 
@@ -171,7 +182,14 @@ class Im2col(Function):
         return y
 
     def backward(self, gy):
-        gx = col2im(gy, *self.input_shape, self.kernel_size, self.stride, self.pad)
+        gx = col2im(
+            gy,
+            self.input_shape,
+            self.kernel_size,
+            self.stride,
+            self.pad,
+            self.to_matrix,
+        )
         return gx
 
 
@@ -199,5 +217,150 @@ class Col2im(Function):
         return gx
 
 
-def col2im(x, kernel_size, stride, pad):
-    return Col2im(kernel_size, stride, pad)(x)
+def col2im(x, input_shape, kernel_size, stride=1, pad=0, to_matrix=True):
+    return Col2im(input_shape, kernel_size, stride, pad, to_matrix)(x)
+
+
+def conv2d_simple(x, Weight, b=None, stride=1, pad=0):
+    x, Weight = as_variable(x), as_variable(Weight)
+
+    # 행렬 크기 맞추는데...C가 두 군데 있네...덮어써지는데...
+    N, C, H, W = x.shape
+    OC, C, KH, KW = Weight.shape
+    # 아무튼 출력크기 계산하고...
+    SH, SW = pair(stride)
+    PH, PW = pair(pad)
+    OH = get_conv_outsize(H, KH, SH, PH)
+    OW = get_conv_outsize(W, KW, SW, PW)
+
+    # 아래 reshape, transpose, linear 다 dezero에서 역전파 걸어놓은 함수들이라 자동 역전파 되고...
+    # 입력은 im2col 트릭이고,
+    col = im2col(x, (KH, KW), stride, pad, to_matrix=True)
+    # 가중치는 채널, 커널크기 묶고 나머지는 출력 채널...
+    # 그럼 [N, (C*KH/W)] x [(C*KH/W), OC] -> (N, OC) 행렬로 출력...
+    Weight = Weight.reshape(OC, -1).transpose()
+    # 여기가 실제 convolution이 되는 거고...
+    t = linear(col, Weight, b)
+    # 그걸 다시 분해해서 배치 x 출력 채널 x 출력 크기(H/W)로 반환...
+    y = t.reshape(N, OH, OW, OC).transpose(0, 3, 1, 2)
+    return y
+
+
+class Conv2d(Function):
+    def __init__(self, stride=1, pad=0):
+        super().__init__()
+        self.stride = pair(stride)
+        self.pad = pair(pad)
+
+    # 이게 convolution...
+    def forward(self, x, Weight, b=None):
+        xp = cuda.get_array_module(x)
+
+        # simple 버전과 달리 가중치는 그대로, im2col은 행렬 형태가 아니라 텐서 형태 그대로...
+        KH, KW = Weight.shape[2:]
+        col = im2col_array(x, (KH, KW), self.stride, self.pad, to_matrix=False)
+
+        # simple 버전(linear)과 달리 tensordot 사용...
+        y = xp.tensordot(col, Weight, ((1, 2, 3), (1, 2, 3)))
+        if b is not None:
+            y += b
+        # 이게 y = np.transpose(y, (0,3,1,2))랑 같다는 건가? 3 축을 1 자리로?
+        y = xp.rollaxis(y, 3, 1)
+        return y
+
+    # 이게 convolution의 역전파이면...이게 되돌리는거 아닌가?
+    def backward(self, gy):
+        x, W, b = self.inputs
+        gx = deconv2d(
+            gy,
+            W,
+            b=None,
+            stride=self.stride,
+            pad=self.pad,
+            outsize=(x.shape[2], x.shape[3]),
+        )
+        gW = Conv2DGradW(self)(x, gy)
+        gb = None
+        if b.data is not None:
+            gb = gy.sum(axis=(0, 2, 3))
+        return gx, gW, gb
+
+
+def conv2d(x, Weight, b=None, stride=1, pad=0):
+    return Conv2d(stride, pad)(x, Weight, b)
+
+
+class Deconv2d(Function):
+    def __init__(self, stride=1, pad=0, outsize=None):
+        super().__init__()
+        self.stride = pair(stride)
+        self.pad = pair(pad)
+        self.outsize = outsize
+
+    def forward(self, x, Weight, b):
+        xp = cuda.get_array_module(x)
+
+        SH, SW = self.stride
+        PH, PW = self.pad
+        C, OC, KH, KW = Weight.shape
+        N, C, H, W = x.shape
+        if self.outsize is None:
+            OH = get_deconv_outsize(H, KH, SH, PH)
+            OW = get_deconv_outsize(W, KW, SW, PW)
+        else:
+            OH, OW = pair(self.outsize)
+        img_shape = (N, OC, OH, OW)
+
+        # 0, 1 축에 대해 합산하는 텐서곱? 근데 이거 convolution의 역전파일텐데 가중치는 왜 곱하지?
+        gcol = xp.tensordot(Weight, x, (0, 1))
+        # 축 3을 0 자리로...
+        gcol = xp.rollaxis(gcol, 3)
+        # 암튼 convolution 되돌리고 b는 더하고...
+        img = col2im_array(
+            gcol, img_shape, (KH, KW), self.stride, self.pad, to_matrix=False
+        )
+        # b는 채널당 하나...
+        if b is not None:
+            self.no_bias = True
+            img += b.reshape((1, b.size, 1, 1))
+        return img
+
+    def backward(self, gy):
+        x, Weight, b = self.inputs
+        # convolution 되돌림의 되돌림인가? 뭔지 모르겠음...
+        gx = conv2d(gy, Weight, b=None, stride=self.stride, pad=self.pad)
+        # 가중치 미분은 여기서만 구해?
+        f = Conv2DGradW(self)
+        gW = f(gy, x)
+        gb = None
+        if b is not None:
+            gb = gy.sum(axis=(0, 2, 3))
+        return gx, gW, gb
+
+
+def deconv2d(x, Weight, b=None, stride=1, pad=0, outsize=None):
+    return Deconv2d(stride, pad, outsize)(x, Weight, b)
+
+
+class Conv2DGradW(Function):
+    def __init__(self, conv2d):
+        W = conv2d.inputs[1]
+        kh, kw = W.shape[2:]
+        self.kernel_size = (kh, kw)
+        self.stride = conv2d.stride
+        self.pad = conv2d.pad
+
+    def forward(self, x, gy):
+        xp = cuda.get_array_module(x)
+        col = im2col(x, self.kernel_size, self.stride, self.pad, to_matrix=False)
+        gW = xp.tensordot(col, gy, ((0, 2, 3), (1, 4, 5)))
+        return gW
+
+    def backward(self, ggW):
+        x, gy = self.inputs
+        (gW,) = self.outputs
+
+        xh, xw = x.shape[2:]
+        gx = deconv2d(gy, gW, stride=self.stride, pad=self.pad, outsize=(xh, xw))
+        ggy = conv2d(x, gW, stride=self.stride, pad=self.pad)
+        return gx, ggy
