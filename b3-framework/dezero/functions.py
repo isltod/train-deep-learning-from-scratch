@@ -511,3 +511,7 @@ def dropout(x, dropout_ratio=0.5):
     else:
         y = x
     return y
+
+
+from dezero.functions_conv import im2col
+from dezero.functions_conv import col2im
