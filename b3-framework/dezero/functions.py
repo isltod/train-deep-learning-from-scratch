@@ -516,3 +516,7 @@ def dropout(x, dropout_ratio=0.5):
 from dezero.functions_conv import im2col
 from dezero.functions_conv import col2im
 from dezero.functions_conv import conv2d_simple
+from dezero.functions_conv import im2col_array
+from dezero.functions_conv import col2im_array
+from dezero.functions_conv import conv2d
+from dezero.functions_conv import pooling

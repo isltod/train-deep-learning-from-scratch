@@ -99,10 +99,11 @@ class Layer:
     # 레이어부터 쌓아주는 것이 아니라,
     # 기본 레이어 구조는 다 만들어놓고, 거기에 매개변수만 저장 값으로 채우기...
     def load_weights(self, path):
-        # 파일은 항상 임시 디렉토리에서 읽자...없으면 그냥 돌아가기
-        path = os.path.join(utils.TMP_DIR, path)
-        if not os.path.exists(path):
-            return
+        # # 파일은 항상 임시 디렉토리에서 읽자...없으면 그냥 돌아가기
+        # path = os.path.join(utils.TMP_DIR, path)
+        # if not os.path.exists(path):
+        #     print("No file or directory for Layer.load_wegiths: '{}'.".format(path))
+        #     return
 
         npz = np.load(path)
         params_dict = {}
