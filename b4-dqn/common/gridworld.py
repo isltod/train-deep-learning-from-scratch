@@ -1,5 +1,5 @@
 import numpy as np
-import gridworld_render as render_helper
+import common.gridworld_render as render_helper
 
 
 class GridWorld:
@@ -79,11 +79,3 @@ class GridWorld:
             self.reward_map, self.goal_state, self.wall_state
         )
         renderer.render_q(q, print_value)
-
-
-if __name__ == "__main__":
-    gw = GridWorld()
-    V = {}
-    for state in gw.states():
-        V[state] = np.random.randn()
-    gw.render_v(V)
