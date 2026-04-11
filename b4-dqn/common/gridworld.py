@@ -68,6 +68,7 @@ class GridWorld:
         self.agent_state = next_state
         return next_state, reward, done
 
+    # 이 아래는 도구 함수로 그림 그리는 거라 일단 그냥 배껴넣음
     def render_v(self, v=None, policy=None, print_value=True):
         renderer = render_helper.Renderer(
             self.reward_map, self.goal_state, self.wall_state
