@@ -25,7 +25,7 @@ print(pi[state])
 def eval_onestep(pi, V, env, gamma=0.9):
     # 그리드월드의 모든 격자에 대해서
     for state in env.states():
-        # 목표 지점이면 가치 함수가 0으로 리셋되고 그냥 통과
+        # 목표 지점이면 해당 상태 가치 함수는 0, 나머진 계산 없이 통과
         if state == env.goal_state:
             V[state] = 0
             continue
