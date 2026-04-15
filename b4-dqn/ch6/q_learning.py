@@ -16,11 +16,15 @@ class QLearningAgent:
         self.action_size = 4
 
         random_actions = {0: 0.25, 1: 0.25, 2: 0.25, 3: 0.25}
-        self.pi = defaultdict(lambda: random_actions)
+        # 샘플 모델로 변경...pi는 매번 갱신하지 않고, 됐다 싶을 때 한 번 계산한다...
+        # self.pi = defaultdict(lambda: random_actions)
         self.b = defaultdict(lambda: random_actions)
         self.Q = defaultdict(lambda: 0)
 
     def get_action(self, state):
+        # update에서 갱신하고 넘겨받지 않고, 필요할 때 바로 ε-탐욕화하고
+        self.b[state] = greedy_probs(self.Q, state, self.epsilon, self.action_size)
+        # b에서 행동 선택
         action_probs = self.b[state]
         actions = list(action_probs.keys())
         probs = list(action_probs.values())
@@ -38,9 +42,10 @@ class QLearningAgent:
         target = reward + self.gamma * next_q_max
         self.Q[state, action] += (target - self.Q[state, action]) * self.alpha
 
-        # 정책 개선 (b는 ε-greedy, pi는 결정론적)
-        self.pi[state] = greedy_probs(self.Q, state, 0, self.action_size)
-        self.b[state] = greedy_probs(self.Q, state, self.epsilon, self.action_size)
+        # 샘플 모델로 변경 - pi는 사용 안하고 b는 get_action에서 바로 갱신해서 사용...
+        # # 정책 개선 (b는 ε-greedy, pi는 결정론적)
+        # self.pi[state] = greedy_probs(self.Q, state, 0, self.action_size)
+        # self.b[state] = greedy_probs(self.Q, state, self.epsilon, self.action_size)
 
 
 if __name__ == "__main__":
