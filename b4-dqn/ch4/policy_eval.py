@@ -46,7 +46,7 @@ def eval_onestep(pi, V, env, gamma=0.9):
 def policy_eval(pi, V, env, gamma=0.9, threshold=0.0001):
     while True:
         old_V = V.copy()
-        # 한 번만 갱신해보고
+        # 한 번 갱신해보고
         V = eval_onestep(pi, V, env, gamma)
 
         # 모든 상태에 대해서 V의 최대 갱신값을 찾아서 그걸 δ로...

@@ -48,7 +48,6 @@ def policy_iter(env, gamma=0.9, threshold=0.0001, is_render=False):
         if is_render:
             env.render_v(V, pi)
         # 기존 정책이나 새 정책이 같다면 이미 최적 정책
-        # 근데 해석적으로는 맞아도 수치적으로 맞나? 몇 번 더 해보면 달라질 수 없나?
         if pi == new_pi:
             break
         pi = new_pi
